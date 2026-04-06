@@ -43,7 +43,14 @@ class FinanceSheets:
     # ─── Connection ────────────────────────────────────────────────────────────
 
     def connect(self):
-        self.creds = Credentials.from_service_account_file(self.credentials_file, scopes=SCOPES)
+        import os, json
+        creds_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
+        if creds_json:
+            info = json.loads(creds_json)
+            self.creds = Credentials.from_service_account_info(info, scopes=SCOPES)
+        else:
+            self.creds = Credentials.from_service_account_file(self.credentials_file, scopes=SCOPES)
+        
         self.gc = gspread.authorize(self.creds)
         try:
             self.sh = self.gc.open(self.spreadsheet_name)

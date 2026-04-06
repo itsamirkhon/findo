@@ -29,4 +29,11 @@ Thumbs.db
 dist/
 build/
 *.egg-info/
-RELEASE_NOTES_DRAFTS.md
+
+# Drafts and posts
+.releases/RELEASE_NOTES_DRAFTS.md
+.releases/BLOG_POST.md
+
+# Database files (if used later)
+*.db
+*.sqlite3
