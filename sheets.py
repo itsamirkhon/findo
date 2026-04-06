@@ -46,8 +46,12 @@ class FinanceSheets:
         import os, json
         creds_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
         if creds_json:
-            info = json.loads(creds_json)
-            self.creds = Credentials.from_service_account_info(info, scopes=SCOPES)
+            try:
+                info = json.loads(creds_json)
+                self.creds = Credentials.from_service_account_info(info, scopes=SCOPES)
+            except json.JSONDecodeError:
+                # Если переменная не является валидным JSON, пробуем использовать её как имя файла
+                self.creds = Credentials.from_service_account_file(creds_json, scopes=SCOPES)
         else:
             self.creds = Credentials.from_service_account_file(self.credentials_file, scopes=SCOPES)
         
