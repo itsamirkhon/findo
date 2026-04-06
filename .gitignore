@@ -16,9 +16,6 @@ ENV/
 .env
 credentials.json
 
-# Release note drafts (local only)
-.releases/
-
 # IDE / OS
 .idea/
 .vscode/
@@ -32,3 +29,4 @@ Thumbs.db
 dist/
 build/
 *.egg-info/
+RELEASE_NOTES_DRAFTS.md
