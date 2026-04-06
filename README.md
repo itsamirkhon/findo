@@ -1,4 +1,4 @@
-# 💰 Finance Bot — AI-powered Telegram Finance Assistant
+# 💰 Findo — AI-powered Telegram Finance Assistant
 
 A personal finance management Telegram bot with AI agent, Google Sheets integration, and a 3-zone budget system (🔴 Red / 🟡 Yellow / 🟢 Green).
 
@@ -27,7 +27,7 @@ A personal finance management Telegram bot with AI agent, Google Sheets integrat
 ## 🗂 Project Structure
 
 ```
-finance-bot/
+findo/
 ├── bot.py              # Telegram bot — handlers, commands, message routing
 ├── agent.py            # AI agent — OpenRouter function calling, tool loop
 ├── sheets.py           # Google Sheets — read/write transactions, budget sync
@@ -46,8 +46,8 @@ finance-bot/
 ### Step 1 — Clone the repository
 
 ```bash
-git clone https://github.com/yourusername/finance-bot.git
-cd finance-bot
+git clone https://github.com/itsamirkhon/findo.git
+cd findo
 ```
 
 ### Step 2 — Create a Telegram Bot
@@ -94,7 +94,7 @@ TELEGRAM_BOT_TOKEN=1234567890:AAFxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 AI_MODEL=google/gemini-flash-1.5
 GOOGLE_CREDENTIALS_FILE=credentials.json
-SPREADSHEET_NAME=MyFinance
+SPREADSHEET_NAME=Findo
 CURRENCY=EUR
 ALLOWED_USERS=123456789
 ```
