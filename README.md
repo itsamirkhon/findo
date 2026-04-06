@@ -49,7 +49,7 @@ Please choose your preferred language:
 - 🇬🇧 **[Detailed Setup Guide (English)](docs/ONBOARDING_EN.md)**
 - 🇷🇺 **[Подробная инструкция (Русский)](docs/ONBOARDING_RU.md)**
 
-*These guides explain everything from creating a Telegram bot to configuring Google Cloud & OpenRouter, completely from scratch.*
+*These guides explain everything from creating a Telegram bot to configuring Google Cloud & OpenRouter, completely from scratch. **Includes a guide on how to host the bot 24/7 for free!***
 
 ---
 

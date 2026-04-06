@@ -140,6 +140,24 @@ python bot.py
 ```
 If everything is done correctly, there will be no red errors in the terminal, and the bot will start replying to your commands in Telegram (send it `/start` or just type "bought a coffee for 2 dollars").
 
+If you close your terminal, the bot will stop working. To make it run 24/7, proceed to Step 5.
+
+---
+
+## Step 5: How to run the bot 24/7 for free (Deploy to Railway) ☁️
+
+**Railway** is a cloud hosting service. We have specifically prepared our codebase so you can deploy your bot in just a few clicks without technical hassle!
+
+1. Sign up at **[Railway.app](https://railway.app)** (you can use your GitHub account).
+2. Click **New Project** -> **Deploy from GitHub repo** and select your copy of the bot repository (make sure you've forked the original repo).
+3. Railway will download your code and try to run it.
+4. **Important:** The bot will crash on the first run because it doesn't have your keys yet.
+5. In the Railway dashboard, open your started service (`findo-bot`), and go to the **Variables** tab.
+6. Create all variables from your local `.env` file (Token, API Key, Spreadsheet Name, Model).
+7. **What about `credentials.json`?** 
+   You shouldn't upload password files to the cloud repo directly. Create a special variable called **`GOOGLE_CREDENTIALS_JSON`**. Open your local `credentials.json` file in a text editor, copy **ALL** of its text (including the `{ }` brackets), and paste it into the value of this new variable.
+8. Once you save all variables, Railway will automatically restart the build, and your bot will come alive 24/7!
+
 ---
 
 ## What to do if something doesn't work? (Common Issues)
