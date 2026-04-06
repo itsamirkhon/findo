@@ -44,26 +44,34 @@ class FinanceSheets:
 
     def connect(self):
         import os, json
-        creds_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
-        if creds_json:
-            try:
-                # Railway иногда передает переменные с сырыми переносами строк (escaped \n)
-                # Заменяем их обратно, если они есть
-                if type(creds_json) == str:
-                    # Попытка обработать не-экранированные "сырые" переменные Railway
-                    creds_json = creds_json.replace('\\n', '\n')
-                    # Если строка обернута в одинарные кавычки в начале и конце
-                    if creds_json.startswith("'") and creds_json.endswith("'"):
-                        creds_json = creds_json[1:-1]
-                
-                info = json.loads(creds_json)
-                self.creds = Credentials.from_service_account_info(info, scopes=SCOPES)
-            except Exception as e:
-                print(f"Error parsing GOOGLE_CREDENTIALS_JSON: {e}")
-                # Если переменная не является валидным JSON, пробуем использовать её как имя файла
-                self.creds = Credentials.from_service_account_file(creds_json, scopes=SCOPES)
+        def parse_service_account_json(raw: str | None) -> dict | None:
+            if not raw:
+                return None
+
+            candidate = raw.strip()
+            if candidate.startswith("'") and candidate.endswith("'"):
+                candidate = candidate[1:-1]
+
+            for payload in (candidate, candidate.replace("\\n", "\n")):
+                try:
+                    info = json.loads(payload)
+                    if isinstance(info, dict) and info.get("type") == "service_account":
+                        return info
+                except json.JSONDecodeError:
+                    continue
+            return None
+
+        creds_json_env = os.getenv("GOOGLE_CREDENTIALS_JSON")
+        creds_file_value = self.credentials_file
+
+        info = parse_service_account_json(creds_json_env)
+        if info is None:
+            info = parse_service_account_json(creds_file_value)
+
+        if info is not None:
+            self.creds = Credentials.from_service_account_info(info, scopes=SCOPES)
         else:
-            self.creds = Credentials.from_service_account_file(self.credentials_file, scopes=SCOPES)
+            self.creds = Credentials.from_service_account_file(creds_file_value, scopes=SCOPES)
         
         self.gc = gspread.authorize(self.creds)
         try:
