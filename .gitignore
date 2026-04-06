@@ -16,6 +16,9 @@ ENV/
 .env
 credentials.json
 
+# Release note drafts (local only)
+.releases/
+
 # IDE / OS
 .idea/
 .vscode/
