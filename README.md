@@ -41,91 +41,15 @@ findo/
 
 ---
 
-## 🚀 Setup Guide
+## 🚀 Setup Guide (Onboarding)
 
-### Step 1 — Clone the repository
+We've prepared highly detailed, step-by-step onboarding documents for beginners. 
+Please choose your preferred language:
 
-```bash
-git clone https://github.com/itsamirkhon/findo.git
-cd findo
-```
+- 🇬🇧 **[Detailed Setup Guide (English)](docs/ONBOARDING_EN.md)**
+- 🇷🇺 **[Подробная инструкция (Русский)](docs/ONBOARDING_RU.md)**
 
-### Step 2 — Create a Telegram Bot
-
-1. Open Telegram and message **@BotFather**
-2. Send `/newbot` and follow the prompts
-3. Copy your **Bot Token** (looks like `1234567890:AAFxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`)
-
-### Step 3 — Set up Google Sheets API
-
-You need a **Google Service Account** to let the bot read/write your spreadsheet.
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project (or use an existing one)
-3. Enable the following APIs:
-   - **Google Sheets API**
-   - **Google Drive API**
-4. Go to **IAM & Admin → Service Accounts**
-5. Click **Create Service Account**, give it any name
-6. On the service account page, go to **Keys → Add Key → Create new key → JSON**
-7. Download the JSON file and **rename it to `credentials.json`**
-8. Place it in the project root directory
-
-> ⚠️ **Never commit `credentials.json` to Git!** It is already in `.gitignore`.
-
-### Step 4 — Get an OpenRouter API Key
-
-1. Go to [openrouter.ai](https://openrouter.ai) and sign up
-2. Navigate to [Keys](https://openrouter.ai/keys) and create a new key
-3. Copy the key (starts with `sk-or-v1-...`)
-
-> 💡 The default model is `google/gemini-flash-1.5` — it's fast and has a generous free tier.
-
-### Step 5 — Configure environment variables
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and fill in your values:
-
-```env
-TELEGRAM_BOT_TOKEN=1234567890:AAFxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-AI_MODEL=google/gemini-flash-1.5
-GOOGLE_CREDENTIALS_FILE=credentials.json
-SPREADSHEET_NAME=Findo
-CURRENCY=EUR
-ALLOWED_USERS=123456789
-```
-
-**Finding your Telegram User ID:**
-- Message **@userinfobot** on Telegram
-- It will reply with your numeric ID
-
-### Step 6 — Install dependencies
-
-```bash
-python -m venv venv
-source venv/bin/activate        # Linux / macOS
-# venv\Scripts\activate         # Windows
-
-pip install -r requirements.txt
-```
-
-### Step 7 — Run the bot
-
-```bash
-python bot.py
-```
-
-The bot will:
-1. Connect to Google Sheets
-2. **Automatically create** the spreadsheet (if `SPREADSHEET_NAME` doesn't exist yet)
-3. Set up all sheet tabs: **Транзакции** (Transactions), **Бюджет** (Budget), **История** (History)
-4. Start polling Telegram
-
-> 💡 On first run, the bot will send you a welcome message with setup instructions.
+*These guides explain everything from creating a Telegram bot to configuring Google Cloud & OpenRouter, completely from scratch.*
 
 ---
 
