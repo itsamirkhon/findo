@@ -19,14 +19,16 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             "/sheet   — Google Sheets link\n"
             "/table   — Google Sheets link\n"
             "/settings — bot settings\n"
-            "/clear   — clear chat history\n"
+            "/clear   — full reset with confirmation\n"
             "/help    — this help message\n\n"
             "*Example phrases:*\n"
             "💸 “Spent 8.50 on coffee in entertainment”\n"
             "💰 “500 salary for a project”\n"
             "📊 “Show statistics for this month”\n"
             "🎤 Voice messages are supported too\n"
-            "🧾 You can send a receipt photo or PDF invoice and I’ll extract the transactions\n",
+            "🧾 You can send a receipt photo or PDF invoice and I’ll extract the transactions\n\n"
+            "*Reset note:*\n"
+            "`/clear` wipes the spreadsheet, budget, settings, and chat memory after button confirmation.\n",
             parse_mode="Markdown",
         )
         return
@@ -36,14 +38,16 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         "/sheet   — ссылка на Google Sheets\n"
         "/table   — ссылка на Google Sheets\n"
         "/settings — настройки бота\n"
-        "/clear   — сбросить историю диалога\n"
+        "/clear   — полный сброс с подтверждением\n"
         "/help    — эта справка\n\n"
         "*Примеры фраз:*\n"
         "💸 «Потратил 8.50 на кофе из категории развлечений»\n"
         "💰 «500 зарплата за проект»\n"
         "📊 «Покажи статистику за этот месяц»\n"
         "🎤 Голосовые тоже поддерживаются (распознаю и обработаю как текст)\n"
-        "🧾 Можно отправить фото чека или PDF-инвойс — распознаю и внесу операции\n",
+        "🧾 Можно отправить фото чека или PDF-инвойс — распознаю и внесу операции\n\n"
+        "*Важно:*\n"
+        "`/clear` полностью очищает таблицу, бюджет, настройки и память чата после подтверждения кнопкой.\n",
         parse_mode="Markdown",
     )
 
