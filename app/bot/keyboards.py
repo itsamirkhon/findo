@@ -24,6 +24,20 @@ def main_keyboard() -> InlineKeyboardMarkup:
 
 
 def settings_keyboard() -> InlineKeyboardMarkup:
+    if is_english():
+        return InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("🌐 Language", callback_data="settings:language"),
+                    InlineKeyboardButton("💱 Currency", callback_data="settings:currency"),
+                ],
+                [
+                    InlineKeyboardButton("🧠 AI Model", callback_data="settings:ai_model"),
+                    InlineKeyboardButton("🕒 Timezone", callback_data="settings:timezone"),
+                ],
+                [InlineKeyboardButton("🔄 Refresh", callback_data="settings:refresh")],
+            ]
+        )
     return InlineKeyboardMarkup(
         [
             [
@@ -40,6 +54,14 @@ def settings_keyboard() -> InlineKeyboardMarkup:
 
 
 def settings_summary() -> str:
+    if is_english():
+        return (
+            "⚙️ *Current Settings*\n\n"
+            f"🌐 Language: `{runtime_state.language}`\n"
+            f"💱 Currency: `{runtime_state.currency}`\n"
+            f"🧠 AI Model: `{runtime_state.ai_model}`\n"
+            f"🕒 Timezone: `{runtime_state.timezone}`\n"
+        )
     return (
         "⚙️ *Текущие настройки*\n\n"
         f"🌐 Язык: `{runtime_state.language}`\n"

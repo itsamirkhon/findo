@@ -8,7 +8,7 @@ import httpx
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from app.bot.state import allowed, log
+from app.bot.state import allowed, is_english, log
 from app.bot.streaming import reply_agent_stream
 from app.core import config
 
@@ -154,29 +154,45 @@ async def process_extracted_finance_text(
     caption: str | None = None,
 ) -> None:
     if not extracted_text:
-        await update.message.reply_text("😕 Не удалось распознать текст. Попробуй более чёткое фото/документ.")
+        await update.message.reply_text(
+            "😕 I could not extract any text. Please try a clearer image or document."
+            if is_english()
+            else "😕 Не удалось распознать текст. Попробуй более чёткое фото/документ."
+        )
         return
 
     preview = extracted_text if len(extracted_text) <= 350 else extracted_text[:350] + "…"
-    await update.message.reply_text(f"📄 Распознал из {source}:\n{preview}")
-
-    user_note = f"\nКомментарий пользователя: {caption}" if caption else ""
-    prompt = (
-        f"Пользователь отправил {source}. Ниже распознанный текст.{user_note}\n\n"
-        f"{extracted_text}\n\n"
-        "Извлеки транзакции и внеси их в учёт. Если данных мало, задай 1 короткий уточняющий вопрос."
+    await update.message.reply_text(
+        f"📄 Extracted from {source}:\n{preview}"
+        if is_english()
+        else f"📄 Распознал из {source}:\n{preview}"
     )
+
+    if is_english():
+        user_note = f"\nUser note: {caption}" if caption else ""
+        prompt = (
+            f"The user sent {source}. Below is the extracted text.{user_note}\n\n"
+            f"{extracted_text}\n\n"
+            "Extract the transactions and record them. If the data is insufficient, ask one short clarifying question."
+        )
+    else:
+        user_note = f"\nКомментарий пользователя: {caption}" if caption else ""
+        prompt = (
+            f"Пользователь отправил {source}. Ниже распознанный текст.{user_note}\n\n"
+            f"{extracted_text}\n\n"
+            "Извлеки транзакции и внеси их в учёт. Если данных мало, задай 1 короткий уточняющий вопрос."
+        )
     await reply_agent_stream(update, prompt)
 
 
 async def handle_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not allowed(update.effective_user.id):
-        await update.message.reply_text("⛔ Нет доступа.")
+        await update.message.reply_text("⛔ Access denied." if is_english() else "⛔ Нет доступа.")
         return
 
     photos = update.message.photo or []
     if not photos:
-        await update.message.reply_text("❌ Фото не найдено.")
+        await update.message.reply_text("❌ Photo not found." if is_english() else "❌ Фото не найдено.")
         return
 
     await ctx.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
@@ -194,7 +210,11 @@ async def handle_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         await process_extracted_finance_text(update, extracted, "фото чека", update.message.caption)
     except Exception as exc:
         log.exception("Photo processing error: %s", exc)
-        await update.message.reply_text("❌ Не удалось обработать фото. Попробуй ещё раз.")
+        await update.message.reply_text(
+            "❌ Failed to process the photo. Please try again."
+            if is_english()
+            else "❌ Не удалось обработать фото. Попробуй ещё раз."
+        )
     finally:
         if temp_path and os.path.exists(temp_path):
             try:
@@ -205,12 +225,12 @@ async def handle_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def handle_document(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not allowed(update.effective_user.id):
-        await update.message.reply_text("⛔ Нет доступа.")
+        await update.message.reply_text("⛔ Access denied." if is_english() else "⛔ Нет доступа.")
         return
 
     document = update.message.document
     if not document:
-        await update.message.reply_text("❌ Файл не найден.")
+        await update.message.reply_text("❌ File not found." if is_english() else "❌ Файл не найден.")
         return
 
     await ctx.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
@@ -236,10 +256,18 @@ async def handle_document(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> Non
             await process_extracted_finance_text(update, extracted, "PDF-инвойса", update.message.caption)
             return
 
-        await update.message.reply_text("⚠️ Пока поддерживаются только изображения и PDF-файлы.")
+        await update.message.reply_text(
+            "⚠️ Only images and PDF files are supported for now."
+            if is_english()
+            else "⚠️ Пока поддерживаются только изображения и PDF-файлы."
+        )
     except Exception as exc:
         log.exception("Document processing error: %s", exc)
-        await update.message.reply_text("❌ Не удалось обработать файл. Попробуй другой PDF/изображение.")
+        await update.message.reply_text(
+            "❌ Failed to process the file. Please try another PDF or image."
+            if is_english()
+            else "❌ Не удалось обработать файл. Попробуй другой PDF/изображение."
+        )
     finally:
         if temp_path and os.path.exists(temp_path):
             try:
@@ -250,12 +278,14 @@ async def handle_document(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> Non
 
 async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not allowed(update.effective_user.id):
-        await update.message.reply_text("⛔ Нет доступа.")
+        await update.message.reply_text("⛔ Access denied." if is_english() else "⛔ Нет доступа.")
         return
 
     if not config.TRANSCRIBE_API_KEY:
         await update.message.reply_text(
-            "🎤 Голосовые пока не настроены: добавь `TRANSCRIBE_API_KEY` в переменные окружения."
+            "🎤 Voice messages are not configured yet: add `TRANSCRIBE_API_KEY` to environment variables."
+            if is_english()
+            else "🎤 Голосовые пока не настроены: добавь `TRANSCRIBE_API_KEY` в переменные окружения."
         )
         return
 
@@ -265,7 +295,11 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         voice = update.message.voice
         if not voice:
-            await update.message.reply_text("❌ Не удалось получить голосовое сообщение.")
+            await update.message.reply_text(
+                "❌ Failed to get the voice message."
+                if is_english()
+                else "❌ Не удалось получить голосовое сообщение."
+            )
             return
 
         tg_file = await ctx.bot.get_file(voice.file_id)
@@ -284,15 +318,25 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             text = await transcribe_voice_file(temp_path)
 
         if not text:
-            await update.message.reply_text("😕 Не смог распознать речь. Попробуй записать чуть громче/чётче.")
+            await update.message.reply_text(
+                "😕 I could not recognize the speech. Please try speaking a bit louder or clearer."
+                if is_english()
+                else "😕 Не смог распознать речь. Попробуй записать чуть громче/чётче."
+            )
             return
 
         preview = text if len(text) <= 220 else text[:220] + "…"
-        await update.message.reply_text(f"🎤 Распознал: {preview}")
+        await update.message.reply_text(
+            f"🎤 Transcribed: {preview}" if is_english() else f"🎤 Распознал: {preview}"
+        )
         await reply_agent_stream(update, text)
     except Exception as exc:
         log.exception("Voice processing error: %s", exc)
-        await update.message.reply_text("❌ Ошибка при обработке голосового. Проверь ключ транскрибации и попробуй снова.")
+        await update.message.reply_text(
+            "❌ Error while processing the voice message. Check the transcription key and try again."
+            if is_english()
+            else "❌ Ошибка при обработке голосового. Проверь ключ транскрибации и попробуй снова."
+        )
     finally:
         if temp_path and os.path.exists(temp_path):
             try:

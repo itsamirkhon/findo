@@ -4,12 +4,13 @@ import time
 
 from telegram import Update
 
-from app.bot.state import STREAM_EDIT_INTERVAL, get_agent, histories, log
+from app.bot.state import STREAM_EDIT_INTERVAL, get_agent, histories, is_english, log
 from app.utils.markdown import md_to_html
 
 
 async def stream_text_reply(message, stream, *, empty_text: str, error_text: str) -> str:
-    placeholder = await message.reply_text("⏳ Думаю...")
+    placeholder_text = "⏳ Thinking..." if is_english() else "⏳ Думаю..."
+    placeholder = await message.reply_text(placeholder_text)
     full_text = ""
     last_edit = 0.0
 
@@ -49,8 +50,12 @@ async def reply_agent_stream(update: Update, text: str) -> None:
     final_text = await stream_text_reply(
         update.message,
         get_agent().process_stream(text, history=history),
-        empty_text="❌ Пустой ответ.",
-        error_text="❌ Ошибка. Попробуй ещё раз или напиши /start",
+        empty_text="❌ Empty response." if is_english() else "❌ Пустой ответ.",
+        error_text=(
+            "❌ Error. Please try again or send /start"
+            if is_english()
+            else "❌ Ошибка. Попробуй ещё раз или напиши /start"
+        ),
     )
     if final_text:
         history.append({"role": "user", "content": text})

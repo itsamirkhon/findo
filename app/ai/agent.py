@@ -182,7 +182,7 @@ TOOLS = [
 
 class FinanceAgent:
     def __init__(self, api_key: str, model: str, sheets: FinanceSheets,
-                 currency: str = "EUR", language: str = "ru"):
+                 currency: str = "EUR", language: str = "en"):
         self.api_key = api_key
         self.model = model
         self.sheets = sheets

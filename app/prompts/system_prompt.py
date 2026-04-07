@@ -40,9 +40,9 @@ FINANCE_SYSTEM_PROMPT_TEMPLATE = """Ты — личный финансовый �
 """
 
 
-def build_finance_system_prompt(currency: str = "EUR", language: str = "ru") -> str:
+def build_finance_system_prompt(currency: str = "EUR", language: str = "en") -> str:
     today_iso = datetime.datetime.now().strftime("%Y-%m-%d")
-    preferred_language = (language or "ru").strip()
+    preferred_language = (language or "en").strip()
     return FINANCE_SYSTEM_PROMPT_TEMPLATE.format(
         currency=currency,
         preferred_language=preferred_language,

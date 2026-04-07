@@ -34,7 +34,7 @@ async def send_welcome(update: Update) -> None:
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not allowed(update.effective_user.id):
-        await update.message.reply_text("⛔ Нет доступа.")
+        await update.message.reply_text("⛔ Access denied." if is_english() else "⛔ Нет доступа.")
         return ConversationHandler.END
 
     month = current_month()
@@ -62,6 +62,13 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def cmd_plan(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not allowed(update.effective_user.id):
         return ConversationHandler.END
+    if is_english():
+        await update.message.reply_text(
+            f"🗓 *Budget setup for {current_month()}*\n\n"
+            "Step 1/4: What is your expected income this month? (EUR)",
+            parse_mode="Markdown",
+        )
+        return ONB_INCOME
     await update.message.reply_text(
         f"🗓 *Настройка бюджета на {month_label()}*\n\n"
         "Шаг 1/4: Какой ожидаемый доход в этом месяце? (EUR)",
@@ -74,10 +81,25 @@ async def onb_income(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     try:
         ctx.user_data["onb_income"] = float(update.message.text.replace(",", "."))
     except ValueError:
-        await update.message.reply_text("❌ Пожалуйста, введи число. Например: `2000`", parse_mode="Markdown")
+        await update.message.reply_text(
+            "❌ Please enter a number. Example: `2000`"
+            if is_english()
+            else "❌ Пожалуйста, введи число. Например: `2000`",
+            parse_mode="Markdown",
+        )
         return ONB_INCOME
 
     categories = ", ".join(RED_ZONE_CATEGORIES)
+    if is_english():
+        await update.message.reply_text(
+            f"✅ Income: {ctx.user_data['onb_income']}€\n\n"
+            "👉 *Step 2/4:* Red zone limits 🔴\n"
+            f"Categories: `{categories}`\n\n"
+            "Enter amounts separated by commas in the same order:\n"
+            "Example: `467, 50, 17, 11, 30, 100, 20`",
+            parse_mode="Markdown",
+        )
+        return ONB_RED
     await update.message.reply_text(
         f"✅ Доход: {ctx.user_data['onb_income']}€\n\n"
         "👉 *Шаг 2/4:* Лимиты Красной зоны 🔴\n"
@@ -97,12 +119,25 @@ async def onb_red(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ctx.user_data["onb_red"] = dict(zip(RED_ZONE_CATEGORIES, values))
     except (ValueError, IndexError):
         await update.message.reply_text(
-            f"❌ Нужно {len(RED_ZONE_CATEGORIES)} чисел через запятую. Пример: `467, 50, 17, 11, 30, 100, 20`",
+            (
+                f"❌ You need {len(RED_ZONE_CATEGORIES)} numbers separated by commas. "
+                "Example: `467, 50, 17, 11, 30, 100, 20`"
+            )
+            if is_english()
+            else f"❌ Нужно {len(RED_ZONE_CATEGORIES)} чисел через запятую. Пример: `467, 50, 17, 11, 30, 100, 20`",
             parse_mode="Markdown",
         )
         return ONB_RED
 
     total_red = sum(ctx.user_data["onb_red"].values())
+    if is_english():
+        await update.message.reply_text(
+            f"✅ Red zone: {total_red}€\n\n"
+            "👉 *Step 3/4:* Yellow zone limit 🟡 (restaurants / fun)?\n"
+            "Example: `150`",
+            parse_mode="Markdown",
+        )
+        return ONB_YELLOW
     await update.message.reply_text(
         f"✅ Красная зона: {total_red}€\n\n"
         "👉 *Шаг 3/4:* Лимит Жёлтой зоны 🟡 (Гулянки/рестораны)?\n"
@@ -116,9 +151,22 @@ async def onb_yellow(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     try:
         ctx.user_data["onb_yellow"] = float(update.message.text.replace(",", "."))
     except ValueError:
-        await update.message.reply_text("❌ Введи число. Например: `150`", parse_mode="Markdown")
+        await update.message.reply_text(
+            "❌ Enter a number. Example: `150`"
+            if is_english()
+            else "❌ Введи число. Например: `150`",
+            parse_mode="Markdown",
+        )
         return ONB_YELLOW
 
+    if is_english():
+        await update.message.reply_text(
+            f"✅ Yellow zone: {ctx.user_data['onb_yellow']}€\n\n"
+            "👉 *Step 4/4:* Green zone limit 🟢 (one-time purchases)?\n"
+            "Example: `200`",
+            parse_mode="Markdown",
+        )
+        return ONB_GREEN
     await update.message.reply_text(
         f"✅ Жёлтая зона: {ctx.user_data['onb_yellow']}€\n\n"
         "👉 *Шаг 4/4:* Лимит Зелёной зоны 🟢 (Разовые покупки)?\n"
@@ -132,7 +180,12 @@ async def onb_green(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     try:
         ctx.user_data["onb_green"] = float(update.message.text.replace(",", "."))
     except ValueError:
-        await update.message.reply_text("❌ Введи число. Например: `200`", parse_mode="Markdown")
+        await update.message.reply_text(
+            "❌ Enter a number. Example: `200`"
+            if is_english()
+            else "❌ Введи число. Например: `200`",
+            parse_mode="Markdown",
+        )
         return ONB_GREEN
 
     month = current_month()
@@ -144,6 +197,18 @@ async def onb_green(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             yellow_limit=ctx.user_data["onb_yellow"],
             green_limit=ctx.user_data["onb_green"],
         )
+        if is_english():
+            await update.message.reply_text(
+                f"🎉 *Budget for {month} saved!*\n\n"
+                f"🔴 Red: {sum(ctx.user_data['onb_red'].values()):.0f}€\n"
+                f"🟡 Yellow: {ctx.user_data['onb_yellow']:.0f}€\n"
+                f"🟢 Green: {ctx.user_data['onb_green']:.0f}€\n"
+                f"💰 Planned income: {ctx.user_data['onb_income']:.0f}€\n\n"
+                "We are ready. Send expenses in plain English.",
+                parse_mode="Markdown",
+                reply_markup=main_keyboard(),
+            )
+            return ConversationHandler.END
         await update.message.reply_text(
             f"🎉 *План на {month_label()} записан!*\n\n"
             f"🔴 Красная: {sum(ctx.user_data['onb_red'].values()):.0f}€\n"
@@ -155,12 +220,19 @@ async def onb_green(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             reply_markup=main_keyboard(),
         )
     except Exception as exc:
-        await update.message.reply_text(f"❌ Ошибка записи плана: {exc}")
+        await update.message.reply_text(
+            f"❌ Error while saving the budget plan: {exc}"
+            if is_english()
+            else f"❌ Ошибка записи плана: {exc}"
+        )
     return ConversationHandler.END
 
 
 async def onb_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("❌ Настройка отменена.", reply_markup=main_keyboard())
+    await update.message.reply_text(
+        "❌ Setup cancelled." if is_english() else "❌ Настройка отменена.",
+        reply_markup=main_keyboard(),
+    )
     return ConversationHandler.END
 
 
