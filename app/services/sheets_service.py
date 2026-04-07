@@ -1,9 +1,13 @@
 """Google Sheets integration for finance tracking — 3-zone budget system."""
-import gspread
-from google.oauth2.service_account import Credentials
+from __future__ import annotations
+
 import datetime
 from typing import Optional
-import styler
+
+import gspread
+from google.oauth2.service_account import Credentials
+
+from app.services import sheet_styler
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -87,7 +91,11 @@ class FinanceSheets:
         self._setup_tx_sheet(ws)
         ws2 = self.sh.add_worksheet("Бюджет", rows=60, cols=6)
         self._setup_budget_sheet(ws2)
-        self.sh.add_worksheet("История", rows=100, cols=10)
+        ws3 = self.sh.add_worksheet("История", rows=100, cols=10)
+        self._setup_history_sheet(ws3)
+        ws4 = self.sh.add_worksheet("Настройки", rows=100, cols=2)
+        ws4.update("A1:B1", [["Ключ", "Значение"]])
+        ws4.freeze(rows=1)
 
     def _ensure_sheets(self):
         titles = [ws.title for ws in self.sh.worksheets()]
@@ -100,6 +108,31 @@ class FinanceSheets:
         if "История" not in titles:
             ws = self.sh.add_worksheet("История", rows=100, cols=10)
             self._setup_history_sheet(ws)
+        if "Настройки" not in titles:
+            ws = self.sh.add_worksheet("Настройки", rows=100, cols=2)
+            ws.update("A1:B1", [["Ключ", "Значение"]])
+            ws.freeze(rows=1)
+
+    def _get_settings_ws(self):
+        return self.sh.worksheet("Настройки")
+
+    def get_setting(self, key: str, default: str = "") -> str:
+        ws = self._get_settings_ws()
+        rows = ws.get_all_values()
+        for row in rows[1:]:
+            if len(row) >= 2 and str(row[0]).strip() == key:
+                return str(row[1]).strip()
+        return default
+
+    def set_setting(self, key: str, value: str) -> dict:
+        ws = self._get_settings_ws()
+        rows = ws.get_all_values()
+        for i, row in enumerate(rows[1:], start=2):
+            if len(row) >= 1 and str(row[0]).strip() == key:
+                ws.update(f"B{i}", [[str(value)]])
+                return {"success": True, "key": key, "value": value}
+        ws.append_row([key, str(value)], value_input_option="USER_ENTERED")
+        return {"success": True, "key": key, "value": value}
 
     # ─── Sheet Setup ───────────────────────────────────────────────────────────
 
@@ -116,7 +149,7 @@ class FinanceSheets:
             "backgroundColor": {"red": 0.13, "green": 0.59, "blue": 0.95},
             "textFormat": {"bold": True, "foregroundColor": {"red": 1, "green": 1, "blue": 1}},
         })
-        styler.apply_tx_styling(self.sh, ws)
+        sheet_styler.apply_tx_styling(self.sh, ws)
 
     def _get_row_layout(self) -> dict:
         """Вычисляет все номера строк листа Бюджет динамически на основе списков категорий."""
@@ -484,11 +517,31 @@ class FinanceSheets:
         if row_id <= 1 or row_id > len(all_values):
             return {"success": False, "message": "Некорректный ID строки"}
         row = all_values[row_id - 1]
-        if trans_date is not None: row[0] = trans_date
-        if amount is not None: row[2] = str(round(float(amount), 2))
-        if category is not None: row[3] = category
-        if description is not None: row[4] = description
-        ws.update(f"A{row_id}:K{row_id}", [row[:11]])
+        if trans_date is not None:
+            row[0] = trans_date
+        if amount is not None:
+            row[2] = str(round(float(amount), 2))
+        if category is not None:
+            row[3] = category
+        if description is not None:
+            row[4] = description
+
+        try:
+            dt = datetime.datetime.strptime(row[0], "%d.%m.%Y")
+        except ValueError:
+            dt = datetime.datetime.now()
+
+        isocal = dt.isocalendar()
+        row[6] = f"{dt.year}-W{isocal[1]:02d}"
+        row[7] = dt.strftime("%Y-%m")
+        row[8] = f"{dt.year}-Q{(dt.month - 1)//3 + 1}"
+        row[9] = f"{dt.year}-H1" if dt.month <= 6 else f"{dt.year}-H2"
+        row[10] = str(dt.year)
+        if len(row) < 12:
+            row.extend([""] * (12 - len(row)))
+        row[11] = datetime.datetime.now().strftime("%d.%m.%Y %H:%M")
+
+        ws.update(f"A{row_id}:L{row_id}", [row[:12]])
         month_str = row[7] if len(row) > 7 else datetime.datetime.now().strftime("%Y-%m")
         self._sync_history(month_str)
         self.update_budget_fact(month_str)

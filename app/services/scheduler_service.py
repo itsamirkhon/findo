@@ -1,56 +1,58 @@
 """Scheduled tasks for the finance bot using JobQueue."""
-from telegram.ext import ContextTypes
 import datetime
+import logging
+
+from telegram.ext import ContextTypes
+
+from app.utils.markdown import md_to_html
+
+log = logging.getLogger(__name__)
+
+
+async def _broadcast_summary(context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
+    config = context.job.data["config"]
+    rendered = md_to_html(text)
+    uids = config.ALLOWED_USERS if config.ALLOWED_USERS else []
+    for uid in uids:
+        await context.bot.send_message(chat_id=uid, text=rendered, parse_mode="HTML")
 
 async def daily_summary(context: ContextTypes.DEFAULT_TYPE):
     """Mini-summary of the day + advice if budget exceeded."""
-    config = context.job.data['config']
-    agent = context.job.data['agent']
-    sheets = context.job.data['sheets']
+    agent = context.job.data["agent"]
     
     prompt = "Проанализируй сегодняшний день (используй get_dashboard). Дай короткий вывод и 1 мотивационный финансовый совет (максимум 3 предложения)."
     try:
         text = await agent.process(prompt, is_job=True)
     except Exception as e:
+        log.exception("Daily summary generation failed: %s", e)
         text = f"🌙 <b>Итоги дня</b>: Ошибка генерации ({e})"
-    
-    # If ALLOWED_USERS is empty, we don't know who to send to unless we track them. 
-    # For now, we assume ALLOWED_USERS has the admin IDs if they want scheduled jobs.
-    uids = config.ALLOWED_USERS if config.ALLOWED_USERS else []
-    for uid in uids:
-        await context.bot.send_message(chat_id=uid, text=text, parse_mode="HTML")
+    await _broadcast_summary(context, text)
 
 
 async def weekly_summary(context: ContextTypes.DEFAULT_TYPE):
     """Weekly report + AI analysis."""
-    config = context.job.data['config']
-    agent = context.job.data['agent']
+    agent = context.job.data["agent"]
     
     prompt = "Подведи итоги прошедшей недели. Похвали за экономию или поругай за лишние 'Гулянки' (используй get_dashboard). Формат: короткий, красивый, с эмодзи."
     try:
         text = await agent.process(prompt, is_job=True)
-    except:
+    except Exception as e:
+        log.exception("Weekly summary generation failed: %s", e)
         text = "📊 <b>Не удалось сгенерировать Итоги недели</b>"
-        
-    uids = config.ALLOWED_USERS if config.ALLOWED_USERS else []
-    for uid in uids:
-        await context.bot.send_message(chat_id=uid, text=text, parse_mode="HTML")
+    await _broadcast_summary(context, text)
 
 
 async def monthly_summary(context: ContextTypes.DEFAULT_TYPE):
     """Monthly report + Plan recommendations."""
-    config = context.job.data['config']
-    agent = context.job.data['agent']
+    agent = context.job.data["agent"]
     
     prompt = "Подведи итоги прошедшего месяца (используй get_dashboard). Дай оценку выполнению Плана и посоветуй, как скорректировать бюджет на следующий месяц."
     try:
         text = await agent.process(prompt, is_job=True)
-    except:
+    except Exception as e:
+        log.exception("Monthly summary generation failed: %s", e)
         text = "📅 <b>Не удалось сгенерировать Итоги месяца</b>"
-        
-    uids = config.ALLOWED_USERS if config.ALLOWED_USERS else []
-    for uid in uids:
-        await context.bot.send_message(chat_id=uid, text=text, parse_mode="HTML")
+    await _broadcast_summary(context, text)
 
 async def monthly_onboarding(context: ContextTypes.DEFAULT_TYPE):
     """Sent on 1st of each month — invites user to fill in the new budget plan."""

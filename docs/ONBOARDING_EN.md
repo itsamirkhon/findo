@@ -63,7 +63,7 @@ The bot cannot simply modify any of your spreadsheets. It needs a special invisi
 2. At the top, switch to the **KEYS** tab.
 3. Click **Add Key** -> **Create new key**.
 4. Choose the **JSON** format and click **Create**.
-5. The file will automatically download to your computer! **Rename this file strictly to `credentials.json`** and place it in the project folder (where `bot.py` is located).
+5. The file will automatically download to your computer! **Rename this file strictly to `credentials.json`** and place it in the project folder (in the project root).
 
 ### 2.4 CRITICAL: Grant the bot access to the Spreadsheet
 Your service account has an email address (you saw it in step 2.3).
@@ -138,12 +138,12 @@ VOICE_DIRECT_MODEL=google/gemini-2.5-flash
 DOCUMENT_MODEL=google/gemini-2.5-flash
 ```
 
-*Make sure that the `credentials.json` file is placed in the exact same folder as `bot.py` and `.env`!*
+*Make sure that the `credentials.json` file is placed in the project root next to `.env`!*
 
 ### 4.3. Run it!
 In your terminal, type:
 ```bash
-python bot.py
+python -m app
 ```
 If everything is done correctly, there will be no red errors in the terminal, and the bot will start replying to your commands in Telegram (send it `/start` or just type "bought a coffee for 2 dollars").
 
@@ -170,7 +170,7 @@ If you close your terminal, the bot will stop working. To make it run 24/7, proc
 ## What to do if something doesn't work? (Common Issues)
 
 1. **The bot ignores my messages:**
-   Check if you entered your ID correctly into `ALLOWED_USERS` in the `.env` file. If you started the bot before adding your ID, restart it (`Ctrl+C` in the terminal, then run `python bot.py` again).
+   Check if you entered your ID correctly into `ALLOWED_USERS` in the `.env` file. If you started the bot before adding your ID, restart it (`Ctrl+C` in the terminal, then run `python -m app` again).
 
 2. **`SpreadsheetNotFound` error or the bot can't find the spreadsheet:**
    You forgot to share the spreadsheet with the service email (see **Step 2.4**). Make sure the spreadsheet title in `.env` (`SPREADSHEET_NAME`) matches letter-for-letter exactly what it is in Google Sheets.

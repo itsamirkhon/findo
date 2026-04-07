@@ -1,0 +1,1 @@
+"""Finance bot application package."""

@@ -6,49 +6,18 @@ import datetime
 import re
 from typing import AsyncIterator
 import httpx
-from sheets import FinanceSheets
+from app.prompts.system_prompt import build_finance_system_prompt
+from app.services.sheets_service import FinanceSheets
 
 # Tools that mutate data — must not be executed more than once per user message
-WRITE_TOOLS = {"add_expense", "add_income", "add_savings", "set_plan",
-               "delete_transaction", "delete_last", "edit_transaction"}
-
-def _build_system_prompt(currency: str = "EUR", language: str = "ru") -> str:
-    today = datetime.datetime.now()
-    today_iso = today.strftime("%Y-%m-%d")
-    preferred_language = "русском" if language == "ru" else "английском"
-    return f"""Ты — личный финансовый ИИ-ассистент Амирхона. Валюта: **{currency}**.
-Ведёшь учёт доходов, расходов и бюджета в Google Sheets по системе трёх цветных зон.
-Сегодня: {today_iso}
-
-🔴 КРАСНАЯ ЗОНА — обязательные расходы (нельзя пропускать):
-  Категории: Аренда, Обучение, Подписки, Связь, Здоровье, Помощь семье, Садака
-
-🟡 ЖЁЛТАЯ ЗОНА — досуг, питание, гулянки:
-  Категории: Гулянки, Питание
-
-🟢 ЗЕЛЁНАЯ ЗОНА — разовые/непредвиденные расходы:
-  Категория: Разовые
-
-💰 ДОХОДЫ бывают: Зарплата, Фриланс, Прочее
-
-Правила:
-- Отвечай только на {preferred_language} языке, используй эмодзи
-- Всегда указывай суммы с знаком валюты: {currency} (не рубли, не доллары!)
-- При вводе расхода — распредели в нужную зону автоматически
-- При слове «обед», «ресторан», «кофе», «бар», «встреча» → Гулянки 🟡
-- При слове «хлеб», «еда», «продукты», «магазин», «кафе», «супермаркет» → Питание 🟡
-- При слове «аренда», «счёт», «школа», «интернет», «лекарство», «линзы», «аптека» → соответствующая Красная категория 🔴
-- При слове «куртка», «телефон», «ремонт», «одежда», «техника» → Разовые 🟢
-- ❗ Не выдумывай новые категории. Используй только те, что перечислены выше.
-- ❗❗ Если пользователь упомянул несколько покупок — вызывай add_expense ОТДЕЛЬНО для каждой! Никогда не следуй суммы.
-- После записи расхода — пиши красивый текст И упомяни: «💼 +X{currency} в Бюджет проектов (10% авто)» где X = 10% от суммы
-- Не возвращай JSON-ответ никогда!
-- Если Жёлтая зона использована >80% — предупреди!
-- ❗ Перед удалением/изменением — всегда сначала вызови search_transactions чтобы узнать row_id. Не угадывай row_id из памяти!
-- ❗ Для статистики по месяцам всегда используй реальный текущий год.
-- Если пользователь пишет месяц без года (например, «апрель») — считай, что это месяц текущего года.
-- Если пользователь пишет «за последний месяц» — это предыдущий календарный месяц от сегодняшней даты.
-"""
+WRITE_TOOLS = {
+    "add_expense",
+    "add_income",
+    "add_savings",
+    "set_plan",
+    "delete_transaction",
+    "edit_transaction",
+}
 
 TOOLS = [
     {
@@ -113,14 +82,25 @@ TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "month":        {"type": "string", "description": "Месяц в формате YYYY-MM"},
-                    "salary":       {"type": "number", "description": "Ожидаемая зарплата/доход"},
-                    "obligatory":   {"type": "number", "description": "Обязательные расходы"},
-                    "fun":          {"type": "number", "description": "Гулянки/развлечения"},
-                    "one_time":     {"type": "number", "description": "Разовые крупные покупки"},
-                    "savings_goal": {"type": "number", "description": "Цель по копилке"},
+                    "month": {"type": "string", "description": "Месяц в формате YYYY-MM"},
+                    "income": {"type": "number", "description": "Ожидаемый доход"},
+                    "red_limits": {
+                        "type": "object",
+                        "description": "Лимиты красной зоны по категориям",
+                        "properties": {
+                            "Аренда": {"type": "number"},
+                            "Обучение": {"type": "number"},
+                            "Подписки": {"type": "number"},
+                            "Связь": {"type": "number"},
+                            "Здоровье": {"type": "number"},
+                            "Помощь семье": {"type": "number"},
+                            "Садака": {"type": "number"}
+                        }
+                    },
+                    "yellow_limit": {"type": "number", "description": "Общий лимит жёлтой зоны"},
+                    "green_limit": {"type": "number", "description": "Лимит зелёной зоны"},
                 },
-                "required": ["month", "salary", "obligatory", "fun", "one_time", "savings_goal"],
+                "required": ["month", "income", "red_limits", "yellow_limit", "green_limit"],
             },
         },
     },
@@ -208,7 +188,7 @@ class FinanceAgent:
         self.sheets = sheets
         self.currency = currency
         self.language = language
-        self.system_prompt = _build_system_prompt(currency, language)
+        self.system_prompt = build_finance_system_prompt(currency, language)
 
     def update_preferences(self, *, model: str | None = None,
                            currency: str | None = None,
@@ -219,7 +199,7 @@ class FinanceAgent:
             self.currency = currency
         if language:
             self.language = language
-        self.system_prompt = _build_system_prompt(self.currency, self.language)
+        self.system_prompt = build_finance_system_prompt(self.currency, self.language)
 
     def _normalize_stats_month(self, month: str | None) -> str:
         now = datetime.datetime.now()
@@ -429,7 +409,7 @@ class FinanceAgent:
                 if tool_name in {"add_expense", "add_income", "add_savings"} and isinstance(result, dict):
                     if m := result.get("affected_month"):
                         affected_months.add(m)
-                elif tool_name in {"delete_transaction", "delete_last", "edit_transaction"} and isinstance(result, dict) and result.get("success"):
+                elif tool_name in {"delete_transaction", "edit_transaction"} and isinstance(result, dict) and result.get("success"):
                     import datetime as _dt
                     affected_months.add(_dt.datetime.now().strftime("%Y-%m"))
 
@@ -458,7 +438,10 @@ class FinanceAgent:
         if any_tools_ran and (not _text or _text.startswith("{") or _text.startswith("[")):
             messages.append({
                 "role": "user",
-                "content": "Подведи итог на русском. Ответь дружельным текстом, без JSON.",
+                "content": (
+                    f"Подведи итог на языке `{self.language}`. "
+                    "Ответь дружелюбным текстом, без JSON."
+                ),
             })
             try:
                 resp2 = await self._call_api(messages, with_tools=False)

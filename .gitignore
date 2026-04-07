@@ -37,3 +37,4 @@ build/
 # Database files (if used later)
 *.db
 *.sqlite3
+.codex
