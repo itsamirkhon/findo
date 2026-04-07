@@ -284,17 +284,35 @@ class FinanceSheets:
             return {}  # No plan for this month yet
 
         all_vals = ws.get_all_values()
+        L = self._get_row_layout()
+
+        def _safe_float(value) -> float:
+            try:
+                if value is None:
+                    return 0.0
+                return float(str(value).replace(" ", "").replace(",", ".") or 0)
+            except Exception:
+                return 0.0
+
         result = {"month": month, "red": {}, "yellow": 0, "green": 0, "income": 0}
+
+        def _b_col(row: int) -> float:
+            idx = row - 1
+            if idx < 0 or idx >= len(all_vals):
+                return 0.0
+            row_vals = all_vals[idx]
+            if len(row_vals) < 2:
+                return 0.0
+            return _safe_float(row_vals[1])
+
         for i, cat in enumerate(RED_ZONE_CATEGORIES):
-            row_idx = 3 + i  # 1-indexed → 0-indexed for list
-            result["red"][cat] = float(all_vals[row_idx - 1][1] or 0)
-        red_itogo = 3 + len(RED_ZONE_CATEGORIES)
-        y_row = red_itogo + 3
-        g_row = y_row + 3
-        inc_row = g_row + 3
-        result["yellow"] = float(all_vals[y_row - 1][1] or 0)
-        result["green"] = float(all_vals[g_row - 1][1] or 0)
-        result["income"] = float(all_vals[inc_row - 1][1] or 0)
+            row_idx = L["red_start"] + i
+            result["red"][cat] = _b_col(row_idx)
+
+        # yellow/green/income are read from dynamic layout
+        result["yellow"] = _b_col(L["yellow_start"])
+        result["green"] = _b_col(L["green_start"])
+        result["income"] = _b_col(L["inc_row"])
         return result
 
     def has_budget_for_month(self, month: str) -> bool:
@@ -584,7 +602,10 @@ class FinanceSheets:
 
         total_expense = red + yellow + green
         balance = income - total_expense
-        plan = self.get_budget_plan(month)
+        try:
+            plan = self.get_budget_plan(month)
+        except Exception:
+            plan = {}
 
         recent = [
             r for r in reversed(all_tx)
