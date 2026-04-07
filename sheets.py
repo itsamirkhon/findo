@@ -534,6 +534,31 @@ class FinanceSheets:
             "has_plan": bool(plan),
         }
 
+    def get_available_months(self) -> list[str]:
+        months: set[str] = set()
+
+        try:
+            tx_ws = self.sh.worksheet("Транзакции")
+            all_tx = tx_ws.get_all_records()
+            for r in all_tx:
+                m = str(r.get("Месяц", "")).strip()
+                if len(m) == 7 and m[4] == "-":
+                    months.add(m)
+        except Exception:
+            pass
+
+        try:
+            ws = self._get_budget_ws()
+            cell = (ws.acell("F1").value or "").strip()
+            if "📅" in cell:
+                cell = cell.replace("📅", "").strip()
+            if len(cell) == 7 and cell[4] == "-":
+                months.add(cell)
+        except Exception:
+            pass
+
+        return sorted(months)
+
     def get_stats_by_month(self, month: str) -> dict:
         tx_ws = self.sh.worksheet("Транзакции")
         all_tx = tx_ws.get_all_records()

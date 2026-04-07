@@ -2,6 +2,8 @@
 from __future__ import annotations
 import json
 import asyncio
+import datetime
+import re
 from typing import AsyncIterator
 import httpx
 from sheets import FinanceSheets
@@ -11,8 +13,11 @@ WRITE_TOOLS = {"add_expense", "add_income", "add_savings", "set_plan",
                "delete_transaction", "delete_last", "edit_transaction"}
 
 def _build_system_prompt(currency: str = "EUR") -> str:
+    today = datetime.datetime.now()
+    today_iso = today.strftime("%Y-%m-%d")
     return f"""Ты — личный финансовый ИИ-ассистент Амирхона. Валюта: **{currency}**.
 Ведёшь учёт доходов, расходов и бюджета в Google Sheets по системе трёх цветных зон.
+Сегодня: {today_iso}
 
 🔴 КРАСНАЯ ЗОНА — обязательные расходы (нельзя пропускать):
   Категории: Аренда, Обучение, Подписки, Связь, Здоровье, Помощь семье, Садака
@@ -39,6 +44,9 @@ def _build_system_prompt(currency: str = "EUR") -> str:
 - Не возвращай JSON-ответ никогда!
 - Если Жёлтая зона использована >80% — предупреди!
 - ❗ Перед удалением/изменением — всегда сначала вызови search_transactions чтобы узнать row_id. Не угадывай row_id из памяти!
+- ❗ Для статистики по месяцам всегда используй реальный текущий год.
+- Если пользователь пишет месяц без года (например, «апрель») — считай, что это месяц текущего года.
+- Если пользователь пишет «за последний месяц» — это предыдущий календарный месяц от сегодняшней даты.
 """
 
 TOOLS = [
@@ -199,6 +207,45 @@ class FinanceAgent:
         self.currency = currency
         self.system_prompt = _build_system_prompt(currency)
 
+    def _normalize_stats_month(self, month: str | None) -> str:
+        now = datetime.datetime.now()
+        default_month = now.strftime("%Y-%m")
+        if not month:
+            return default_month
+
+        raw = str(month).strip()
+        m = re.match(r"^(\d{4})-(\d{1,2})$", raw)
+        if not m:
+            return default_month
+
+        year = int(m.group(1))
+        mon = int(m.group(2))
+        if mon < 1 or mon > 12:
+            return default_month
+
+        normalized = f"{year:04d}-{mon:02d}"
+
+        available = set()
+        try:
+            available = set(self.sheets.get_available_months())
+        except Exception:
+            available = set()
+
+        if available and normalized not in available:
+            candidates = [
+                f"{now.year:04d}-{mon:02d}",
+                f"{(now.year - 1):04d}-{mon:02d}",
+                normalized,
+            ]
+            for c in candidates:
+                if c in available:
+                    return c
+
+        if year < now.year - 1:
+            return f"{now.year:04d}-{mon:02d}"
+
+        return normalized
+
     async def process(self, user_message: str, history: list | None = None, is_job: bool = False) -> str:
         messages = [{"role": "system", "content": self.system_prompt}]
         if history:
@@ -267,7 +314,8 @@ class FinanceAgent:
                 case "get_dashboard":
                     return self.sheets.get_dashboard_data()
                 case "get_stats":
-                    return self.sheets.get_stats_by_month(args["month"])
+                    month = self._normalize_stats_month(args.get("month"))
+                    return self.sheets.get_stats_by_month(month)
                 case "search_transactions":
                     return {"transactions": self.sheets.search_transactions(query=args.get("query", ""))}
                 case "delete_transaction":
