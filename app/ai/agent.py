@@ -7,7 +7,15 @@ import re
 from typing import AsyncIterator
 import httpx
 from app.prompts.system_prompt import build_finance_system_prompt
-from app.services.sheets_service import FinanceSheets
+from app.services.sheets_service import (
+    CATEGORY_ALIASES,
+    CATEGORY_LABELS,
+    FinanceSheets,
+    GREEN_ZONE_CATEGORIES,
+    INCOME_CATEGORIES,
+    RED_ZONE_CATEGORIES,
+    YELLOW_ZONE_CATEGORIES,
+)
 
 # Tools that mutate data — must not be executed more than once per user message
 WRITE_TOOLS = {
@@ -19,23 +27,23 @@ WRITE_TOOLS = {
     "edit_transaction",
 }
 
+EXPENSE_CATEGORY_ENUM = [CATEGORY_LABELS["en"][category] for category in (RED_ZONE_CATEGORIES + YELLOW_ZONE_CATEGORIES + GREEN_ZONE_CATEGORIES)]
+INCOME_CATEGORY_ENUM = [CATEGORY_LABELS["en"][category] for category in INCOME_CATEGORIES]
+RED_LIMIT_PROPERTIES = {CATEGORY_LABELS["en"][category]: {"type": "number"} for category in RED_ZONE_CATEGORIES}
+
 TOOLS = [
     {
         "type": "function",
         "function": {
             "name": "add_expense",
-            "description": "Добавить расход. Каждый товар/покупка = отдельный вызов. Нельзя слагать несколько покупок в одну! Категории: Красная (Аренда/Обучение/Подписки/Связь/Здоровье/Помощь семье/Садака), Жёлтая (Гулянки/Питание), Зелёная (Разовые)",
+            "description": "Add an expense. Each purchased item must be a separate call. Never merge multiple purchases into one call. Categories: Red Zone (Rent, Education, Subscriptions, Communication, Health, Family Support, Sadaqah), Yellow Zone (Fun, Food), Green Zone (One-Time).",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "amount":      {"type": "number",  "description": "Сумма"},
-                    "category":    {"type": "string",  "enum": [
-                        "Аренда", "Обучение", "Подписки", "Связь",
-                        "Здоровье", "Помощь семье", "Садака",
-                        "Гулянки", "Питание", "Разовые"
-                    ]},
-                    "description": {"type": "string",  "description": "Описание"},
-                    "trans_date":  {"type": "string",  "description": "Дата ДД.ММ.ГГГГ (опционально)"},
+                    "amount":      {"type": "number",  "description": "Amount"},
+                    "category":    {"type": "string",  "enum": EXPENSE_CATEGORY_ENUM},
+                    "description": {"type": "string",  "description": "Description"},
+                    "trans_date":  {"type": "string",  "description": "Date in DD.MM.YYYY format (optional)"},
                 },
                 "required": ["amount", "category", "description"],
             },
@@ -45,14 +53,14 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "add_income",
-            "description": "Добавить доход",
+            "description": "Add an income transaction",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "amount":      {"type": "number",  "description": "Сумма"},
-                    "category":    {"type": "string",  "enum": ["Зарплата", "Фриланс", "Прочее"]},
-                    "description": {"type": "string",  "description": "Описание"},
-                    "trans_date":  {"type": "string",  "description": "Дата ДД.ММ.ГГГГ (опционально)"},
+                    "amount":      {"type": "number",  "description": "Amount"},
+                    "category":    {"type": "string",  "enum": INCOME_CATEGORY_ENUM},
+                    "description": {"type": "string",  "description": "Description"},
+                    "trans_date":  {"type": "string",  "description": "Date in DD.MM.YYYY format (optional)"},
                 },
                 "required": ["amount", "category", "description"],
             },
@@ -62,13 +70,13 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "add_savings",
-            "description": "Отложить в копилку",
+            "description": "Add money to savings",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "amount":      {"type": "number",  "description": "Сумма"},
-                    "description": {"type": "string",  "description": "На что отложили или откуда"},
-                    "trans_date":  {"type": "string",  "description": "Дата ДД.ММ.ГГГГ (опционально)"},
+                    "amount":      {"type": "number",  "description": "Amount"},
+                    "description": {"type": "string",  "description": "What the savings are for or where they came from"},
+                    "trans_date":  {"type": "string",  "description": "Date in DD.MM.YYYY format (optional)"},
                 },
                 "required": ["amount", "description"],
             },
@@ -78,27 +86,19 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "set_plan",
-            "description": "Поставить план бюджета на месяц",
+            "description": "Set the monthly budget plan",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "month": {"type": "string", "description": "Месяц в формате YYYY-MM"},
-                    "income": {"type": "number", "description": "Ожидаемый доход"},
+                    "month": {"type": "string", "description": "Month in YYYY-MM format"},
+                    "income": {"type": "number", "description": "Expected income"},
                     "red_limits": {
                         "type": "object",
-                        "description": "Лимиты красной зоны по категориям",
-                        "properties": {
-                            "Аренда": {"type": "number"},
-                            "Обучение": {"type": "number"},
-                            "Подписки": {"type": "number"},
-                            "Связь": {"type": "number"},
-                            "Здоровье": {"type": "number"},
-                            "Помощь семье": {"type": "number"},
-                            "Садака": {"type": "number"}
-                        }
+                        "description": "Red zone limits by category",
+                        "properties": RED_LIMIT_PROPERTIES,
                     },
-                    "yellow_limit": {"type": "number", "description": "Общий лимит жёлтой зоны"},
-                    "green_limit": {"type": "number", "description": "Лимит зелёной зоны"},
+                    "yellow_limit": {"type": "number", "description": "Total yellow zone limit"},
+                    "green_limit": {"type": "number", "description": "Green zone limit"},
                 },
                 "required": ["month", "income", "red_limits", "yellow_limit", "green_limit"],
             },
@@ -108,21 +108,21 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "get_project_budget",
-            "description": "Показать накопленный Бюджет проектов (автоматически 10% от каждого расхода)",
+            "description": "Show the accumulated project budget (automatically 10% from every expense)",
         },
     },
     {
         "type": "function",
         "function": {
             "name": "get_dashboard",
-            "description": "Получить полный дашборд (План/Факт за текущий месяц и статистику)",
+            "description": "Get the full dashboard (plan vs actual for the current month and statistics)",
         },
     },
     {
         "type": "function",
         "function": {
             "name": "get_stats",
-            "description": "Статистика за определенный месяц",
+            "description": "Get statistics for a specific month",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -136,11 +136,11 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "search_transactions",
-            "description": "Поиск транзакций по паттерну, возвращает список с row_id",
+            "description": "Search transactions by pattern and return a list with row_id",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "Поисковый запрос (категория, сумма или описание). Оставьте пустым чтобы получить 10 последних."}
+                    "query": {"type": "string", "description": "Search query by category, amount, or description. Leave empty to get the latest 10."}
                 }
             }
         }
@@ -149,11 +149,11 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "delete_transaction",
-            "description": "Удалить конкретную транзакцию по её ID строки (row_id)",
+            "description": "Delete a specific transaction by its row ID",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "row_id": {"type": "integer", "description": "ID строки транзакции, полученный через search_transactions"}
+                    "row_id": {"type": "integer", "description": "Transaction row ID obtained via search_transactions"}
                 },
                 "required": ["row_id"]
             }
@@ -163,15 +163,15 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "edit_transaction",
-            "description": "Изменить существующую транзакцию (сумму, категорию, описание, дату)",
+            "description": "Edit an existing transaction (amount, category, description, or date)",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "row_id":      {"type": "integer", "description": "ID строки (найти через search_transactions)"},
-                    "amount":      {"type": "number",  "description": "Новая сумма (опционально)"},
-                    "category":    {"type": "string",  "description": "Новая категория (опционально)"},
-                    "description": {"type": "string",  "description": "Новое описание (опционально)"},
-                    "trans_date":  {"type": "string",  "description": "Новая дата ДД.ММ.ГГГГ (опционально)"}
+                    "row_id":      {"type": "integer", "description": "Row ID found via search_transactions"},
+                    "amount":      {"type": "number",  "description": "New amount (optional)"},
+                    "category":    {"type": "string",  "description": "New category (optional)"},
+                    "description": {"type": "string",  "description": "New description (optional)"},
+                    "trans_date":  {"type": "string",  "description": "New date in DD.MM.YYYY format (optional)"}
                 },
                 "required": ["row_id"]
             }
@@ -189,6 +189,20 @@ class FinanceAgent:
         self.currency = currency
         self.language = language
         self.system_prompt = build_finance_system_prompt(currency, language)
+
+    def _canonical_category(self, value: str) -> str:
+        raw = str(value or "").strip()
+        for canonical, aliases in CATEGORY_ALIASES.items():
+            if raw in aliases:
+                return canonical
+        return raw
+
+    def _normalize_red_limits(self, raw_limits: dict | None) -> dict:
+        raw_limits = raw_limits or {}
+        normalized: dict[str, float] = {}
+        for key, value in raw_limits.items():
+            normalized[self._canonical_category(key)] = value
+        return normalized
 
     def update_preferences(self, *, model: str | None = None,
                            currency: str | None = None,
@@ -255,7 +269,7 @@ class FinanceAgent:
             resp = await self._call_api(messages)
             tool_calls = resp.get("tool_calls") or []
             if not tool_calls:
-                return resp.get("content") or "Произошла ошибка, попробуйте снова."
+                return resp.get("content") or "Something went wrong. Please try again."
 
             messages.append({
                 "role": "assistant",
@@ -275,31 +289,31 @@ class FinanceAgent:
                     "content": json.dumps(result, ensure_ascii=False),
                 })
 
-        return "Не удалось обработать запрос. Попробуйте ещё раз."
+        return "I couldn't process the request. Please try again."
 
     def _run_tool(self, name: str, args: dict) -> dict:
         try:
             match name:
                 case "add_expense":
                     return self.sheets.add_transaction(
-                        amount=args["amount"], category=args["category"],
-                        description=args["description"], trans_type="Расход", trans_date=args.get("trans_date")
+                        amount=args["amount"], category=self._canonical_category(args["category"]),
+                        description=args["description"], trans_type="Expense", trans_date=args.get("trans_date")
                     )
                 case "add_income":
                     return self.sheets.add_transaction(
-                        amount=args["amount"], category=args["category"],
-                        description=args["description"], trans_type="Доход", trans_date=args.get("trans_date")
+                        amount=args["amount"], category=self._canonical_category(args["category"]),
+                        description=args["description"], trans_type="Income", trans_date=args.get("trans_date")
                     )
                 case "add_savings":
                     return self.sheets.add_transaction(
                         amount=args["amount"], category="Копилка",
-                        description=args["description"], trans_type="Копилка", trans_date=args.get("trans_date")
+                        description=args["description"], trans_type="Savings", trans_date=args.get("trans_date")
                     )
                 case "set_plan":
                     return self.sheets.set_budget_plan(
                         month=args["month"],
                         income=args["income"],
-                        red_limits=args["red_limits"],
+                        red_limits=self._normalize_red_limits(args["red_limits"]),
                         yellow_limit=args["yellow_limit"],
                         green_limit=args["green_limit"],
                     )
@@ -395,7 +409,7 @@ class FinanceAgent:
                 # but blocks identical duplicate calls like хлеб 4€ × 4 times
                 sig = f"{tool_name}:{json.dumps(args, sort_keys=True, ensure_ascii=False)}"
                 if tool_name in WRITE_TOOLS and sig in executed_writes:
-                    result = {"error": "Дубль: эта операция с теми же данными уже выполнена"}
+                    result = {"error": "Duplicate: the same operation with identical data has already been executed"}
                 else:
                     result = self._run_tool(tool_name, args)
                     if tool_name in WRITE_TOOLS:

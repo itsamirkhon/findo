@@ -23,7 +23,7 @@ def allowed(uid: int) -> bool:
 
 
 def is_english() -> bool:
-    return runtime_state.language.strip().lower().startswith("en")
+    return True
 
 
 def current_month() -> str:
@@ -62,21 +62,25 @@ def set_agent(value: FinanceAgent) -> None:
 
 
 def apply_runtime_setting(key: str, value: str) -> None:
+    if key == "language":
+        runtime_state.language = "en"
+        return
+
     runtime_state.update(key, value)
 
     if key == "currency":
         sheets.currency = value
 
-    if agent and key in {"currency", "language", "ai_model"}:
+    if agent and key in {"currency", "ai_model"}:
         agent.update_preferences(
             model=runtime_state.ai_model,
             currency=runtime_state.currency,
-            language=runtime_state.language,
+            language="en",
         )
 
 
 def reset_runtime_settings_to_defaults() -> None:
-    runtime_state.language = config.LANGUAGE
+    runtime_state.language = "en"
     runtime_state.currency = config.CURRENCY
     runtime_state.ai_model = config.AI_MODEL
     runtime_state.timezone = config.TIMEZONE
@@ -86,5 +90,5 @@ def reset_runtime_settings_to_defaults() -> None:
         agent.update_preferences(
             model=runtime_state.ai_model,
             currency=runtime_state.currency,
-            language=runtime_state.language,
+            language="en",
         )

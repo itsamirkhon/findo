@@ -34,6 +34,126 @@ CATEGORY_TO_ZONE = {c: "red" for c in RED_ZONE_CATEGORIES}
 CATEGORY_TO_ZONE.update({c: "yellow" for c in YELLOW_ZONE_CATEGORIES})
 CATEGORY_TO_ZONE.update({c: "green" for c in GREEN_ZONE_CATEGORIES})
 
+SUPPORTED_SHEET_LANGUAGES = {"en", "ru"}
+DEFAULT_SHEET_LANGUAGE = "en"
+
+SHEET_TITLES = {
+    "en": {
+        "transactions": "Transactions",
+        "budget": "Budget",
+        "history": "History",
+        "settings": "Settings",
+    },
+    "ru": {
+        "transactions": "Транзакции",
+        "budget": "Бюджет",
+        "history": "История",
+        "settings": "Настройки",
+    },
+}
+
+TX_HEADERS = {
+    "en": ["Date", "Type", "Amount", "Category", "Description", "Currency", "Week", "Month", "Quarter", "Half-Year", "Year", "Added At"],
+    "ru": ["Дата", "Тип", "Сумма", "Категория", "Описание", "Валюта", "Неделя", "Месяц", "Квартал", "Полугодие", "Год", "Добавлено"],
+}
+TX_HEADER_ALIASES = {
+    "date": {"Date", "Дата"},
+    "type": {"Type", "Тип"},
+    "amount": {"Amount", "Сумма"},
+    "category": {"Category", "Категория"},
+    "description": {"Description", "Описание"},
+    "currency": {"Currency", "Валюта"},
+    "week": {"Week", "Неделя"},
+    "month": {"Month", "Месяц"},
+    "quarter": {"Quarter", "Квартал"},
+    "half_year": {"Half-Year", "Полугодие"},
+    "year": {"Year", "Год"},
+    "added_at": {"Added At", "Добавлено"},
+}
+
+HISTORY_HEADERS = {
+    "en": ["Month", "Income", "Obligatory", "Fun", "One-Time", "Savings", "Total Expenses", "Balance"],
+    "ru": ["Месяц", "Доходы", "Обязательное", "Гулянки", "Разовые", "Копилка", "Всего расходов", "Баланс"],
+}
+HISTORY_HEADER_ALIASES = {
+    "month": {"Month", "Месяц"},
+    "income": {"Income", "Доходы"},
+    "obligatory": {"Obligatory", "Обязательное"},
+    "fun": {"Fun", "Гулянки"},
+    "one_time": {"One-Time", "Разовые"},
+    "savings": {"Savings", "Копилка"},
+    "total_expenses": {"Total Expenses", "Всего расходов"},
+    "balance": {"Balance", "Баланс"},
+}
+
+SETTINGS_HEADERS = {
+    "en": ["Key", "Value"],
+    "ru": ["Ключ", "Значение"],
+}
+
+TYPE_LABELS = {
+    "en": {"income": "Income", "expense": "Expense", "savings": "Savings"},
+    "ru": {"income": "Доход", "expense": "Расход", "savings": "Копилка"},
+}
+TYPE_ALIASES = {
+    "income": {"Income", "Доход"},
+    "expense": {"Expense", "Расход"},
+    "savings": {"Savings", "Копилка"},
+}
+
+CATEGORY_LABELS = {
+    "en": {
+        "Аренда": "Rent",
+        "Обучение": "Education",
+        "Подписки": "Subscriptions",
+        "Связь": "Communication",
+        "Здоровье": "Health",
+        "Помощь семье": "Family Support",
+        "Садака": "Sadaqah",
+        "Гулянки": "Fun",
+        "Питание": "Food",
+        "Разовые": "One-Time",
+        "Зарплата": "Salary",
+        "Фриланс": "Freelance",
+        "Прочее": "Other",
+        "Копилка": "Savings",
+    },
+    "ru": {},
+}
+CATEGORY_LABELS["ru"] = {name: name for name in CATEGORY_LABELS["en"]}
+CATEGORY_ALIASES: dict[str, set[str]] = {}
+for canonical_name, en_label in CATEGORY_LABELS["en"].items():
+    CATEGORY_ALIASES[canonical_name] = {canonical_name, en_label}
+
+BUDGET_TEXT = {
+    "en": {
+        "header": ["Category", "Limit", "Actual (auto)", "Remaining", "Zone", "Note"],
+        "red_header": "🔴 RED ZONE — Obligatory",
+        "yellow_header": "🟡 YELLOW ZONE — Fun, food, eating out",
+        "green_header": "🟢 GREEN ZONE — One-time expenses",
+        "red_total": "TOTAL 🔴",
+        "yellow_total": "TOTAL 🟡",
+        "green_total": "TOTAL 🟢",
+        "income_block": "💰 INCOME AND PROJECTS",
+        "planned_income": "Planned income",
+        "project_budget": "💼 Project budget",
+        "project_note": "auto: 10% of expenses",
+    },
+    "ru": {
+        "header": ["Категория", "Лимит", "Факт (авто)", "Остаток", "Зона", "Примечание"],
+        "red_header": "🔴 КРАСНАЯ ЗОНА — Обязательное",
+        "yellow_header": "🟡 ЖЁЛТАЯ ЗОНА — Досуг, питание, гулянки",
+        "green_header": "🟢 ЗЕЛЁНАЯ ЗОНА — Разовые расходы",
+        "red_total": "ИТОГО 🔴",
+        "yellow_total": "ИТОГО 🟡",
+        "green_total": "ИТОГО 🟢",
+        "income_block": "💰 ДОХОДЫ И ПРОЕКТЫ",
+        "planned_income": "Доход (план)",
+        "project_budget": "💼 Бюджет проектов",
+        "project_note": "авто: 10% от расходов",
+    },
+}
+
 
 class FinanceSheets:
     def __init__(self, credentials_file: str, spreadsheet_name: str, currency: str = "EUR"):
@@ -43,6 +163,7 @@ class FinanceSheets:
         self.gc = None
         self.sh = None
         self.creds = None
+        self.sheet_language = DEFAULT_SHEET_LANGUAGE
 
     # ─── Connection ────────────────────────────────────────────────────────────
 
@@ -84,39 +205,122 @@ class FinanceSheets:
             self.sh = self.gc.create(self.spreadsheet_name)
             self._init_spreadsheet()
         self._ensure_sheets()
+        self.sheet_language = self._get_sheet_language()
 
     def _init_spreadsheet(self):
         ws = self.sh.get_worksheet(0)
-        ws.update_title("Транзакции")
-        self._setup_tx_sheet(ws)
-        ws2 = self.sh.add_worksheet("Бюджет", rows=60, cols=6)
-        self._setup_budget_sheet(ws2)
-        ws3 = self.sh.add_worksheet("История", rows=100, cols=10)
-        self._setup_history_sheet(ws3)
-        ws4 = self.sh.add_worksheet("Настройки", rows=100, cols=2)
-        self._reset_settings_sheet(ws4)
+        ws.update_title(self._sheet_title("transactions", DEFAULT_SHEET_LANGUAGE))
+        self._setup_tx_sheet(ws, DEFAULT_SHEET_LANGUAGE)
+        ws2 = self.sh.add_worksheet(self._sheet_title("budget", DEFAULT_SHEET_LANGUAGE), rows=60, cols=6)
+        self._setup_budget_sheet(ws2, DEFAULT_SHEET_LANGUAGE)
+        ws3 = self.sh.add_worksheet(self._sheet_title("history", DEFAULT_SHEET_LANGUAGE), rows=100, cols=10)
+        self._setup_history_sheet(ws3, DEFAULT_SHEET_LANGUAGE)
+        ws4 = self.sh.add_worksheet(self._sheet_title("settings", DEFAULT_SHEET_LANGUAGE), rows=100, cols=2)
+        self._reset_settings_sheet(ws4, DEFAULT_SHEET_LANGUAGE)
 
     def _ensure_sheets(self):
-        titles = [ws.title for ws in self.sh.worksheets()]
-        if "Транзакции" not in titles:
-            ws = self.sh.add_worksheet("Транзакции", rows=2000, cols=12)
-            self._setup_tx_sheet(ws)
-        if "Бюджет" not in titles:
-            ws = self.sh.add_worksheet("Бюджет", rows=60, cols=6)
-            self._setup_budget_sheet(ws)
-        if "История" not in titles:
-            ws = self.sh.add_worksheet("История", rows=100, cols=10)
-            self._setup_history_sheet(ws)
-        if "Настройки" not in titles:
-            ws = self.sh.add_worksheet("Настройки", rows=100, cols=2)
-            self._reset_settings_sheet(ws)
+        for sheet_key, rows, cols, setup in (
+            ("transactions", 2000, 12, self._setup_tx_sheet),
+            ("budget", 60, 6, self._setup_budget_sheet),
+            ("history", 100, 10, self._setup_history_sheet),
+            ("settings", 100, 2, self._reset_settings_sheet),
+        ):
+            if not self._find_worksheet(sheet_key):
+                ws = self.sh.add_worksheet(self._sheet_title(sheet_key, self.sheet_language), rows=rows, cols=cols)
+                setup(ws, self.sheet_language)
 
     def _get_settings_ws(self):
-        return self.sh.worksheet("Настройки")
+        return self._worksheet("settings")
 
-    def _reset_settings_sheet(self, ws) -> None:
+    def _sheet_title(self, key: str, language: str | None = None) -> str:
+        lang = self._normalize_sheet_language(language)
+        return SHEET_TITLES[lang][key]
+
+    def _normalize_sheet_language(self, language: str | None) -> str:
+        normalized = (language or self.sheet_language or DEFAULT_SHEET_LANGUAGE).strip().lower()
+        if normalized.startswith("ru"):
+            return "ru"
+        return "en"
+
+    def _find_worksheet(self, key: str):
+        aliases = {titles[key] for titles in SHEET_TITLES.values()}
+        for ws in self.sh.worksheets():
+            if ws.title in aliases:
+                return ws
+        return None
+
+    def _worksheet(self, key: str):
+        ws = self._find_worksheet(key)
+        if ws is None:
+            raise gspread.WorksheetNotFound(key)
+        return ws
+
+    def _display_type(self, canonical_type: str, language: str | None = None) -> str:
+        lang = self._normalize_sheet_language(language)
+        return TYPE_LABELS[lang][canonical_type]
+
+    def _canonical_type(self, value: str) -> str:
+        raw = str(value or "").strip()
+        for canonical, aliases in TYPE_ALIASES.items():
+            if raw in aliases:
+                return canonical
+        return raw.lower() or "expense"
+
+    def _display_category(self, canonical_category: str, language: str | None = None) -> str:
+        lang = self._normalize_sheet_language(language)
+        return CATEGORY_LABELS[lang].get(canonical_category, canonical_category)
+
+    def _canonical_category(self, value: str) -> str:
+        raw = str(value or "").strip()
+        for canonical, aliases in CATEGORY_ALIASES.items():
+            if raw in aliases:
+                return canonical
+        return raw
+
+    def _record_value(self, record: dict, aliases: dict[str, set[str]], key: str, default=""):
+        for alias in aliases[key]:
+            if alias in record:
+                return record.get(alias, default)
+        return default
+
+    def _normalize_tx_record(self, record: dict) -> dict:
+        normalized: dict[str, str] = {}
+        for key in TX_HEADER_ALIASES:
+            normalized[key] = self._record_value(record, TX_HEADER_ALIASES, key, "")
+        normalized["type"] = self._canonical_type(normalized["type"])
+        normalized["category"] = self._canonical_category(normalized["category"])
+        return normalized
+
+    def _normalize_history_record(self, record: dict) -> dict:
+        normalized: dict[str, str] = {}
+        for key in HISTORY_HEADER_ALIASES:
+            normalized[key] = self._record_value(record, HISTORY_HEADER_ALIASES, key, 0 if key != "month" else "")
+        return normalized
+
+    def _get_sheet_language(self) -> str:
+        try:
+            settings_ws = self._get_settings_ws()
+            rows = settings_ws.get_all_values()
+            for row in rows[1:]:
+                if len(row) >= 2 and str(row[0]).strip() == "sheet_language":
+                    return self._normalize_sheet_language(row[1])
+                if len(row) >= 2 and str(row[0]).strip() == "language":
+                    return self._normalize_sheet_language(row[1])
+        except Exception:
+            pass
+        try:
+            tx_ws = self._worksheet("transactions")
+            header = str(tx_ws.acell("A1").value or "").strip()
+            if header == "Дата":
+                return "ru"
+        except Exception:
+            pass
+        return DEFAULT_SHEET_LANGUAGE
+
+    def _reset_settings_sheet(self, ws, language: str | None = None) -> None:
+        headers = SETTINGS_HEADERS[self._normalize_sheet_language(language)]
         ws.clear()
-        ws.update("A1:B1", [["Ключ", "Значение"]])
+        ws.update("A1:B1", [headers])
         ws.freeze(rows=1)
 
     def get_setting(self, key: str, default: str = "") -> str:
@@ -137,33 +341,137 @@ class FinanceSheets:
         ws.append_row([key, str(value)], value_input_option="USER_ENTERED")
         return {"success": True, "key": key, "value": value}
 
+    def localize_spreadsheet(self, language: str) -> None:
+        language = self._normalize_sheet_language(language)
+        if not self.sh:
+            raise RuntimeError("Spreadsheet is not connected")
+
+        tx_ws = self._worksheet("transactions")
+        budget_ws = self._worksheet("budget")
+        history_ws = self._worksheet("history")
+        settings_ws = self._worksheet("settings")
+
+        self._localize_transactions_sheet(tx_ws, language)
+        self._localize_budget_sheet(budget_ws, language)
+        self._localize_history_sheet(history_ws, language)
+        self._localize_settings_sheet(settings_ws, language)
+
+        tx_ws.update_title(self._sheet_title("transactions", language))
+        budget_ws.update_title(self._sheet_title("budget", language))
+        history_ws.update_title(self._sheet_title("history", language))
+        settings_ws.update_title(self._sheet_title("settings", language))
+
+        self.sheet_language = language
+        self.set_setting("sheet_language", language)
+
+    def _localize_transactions_sheet(self, ws, language: str) -> None:
+        rows = ws.get_all_values()
+        if len(rows) <= 1:
+            self._setup_tx_sheet(ws, language)
+            return
+        localized_rows = [TX_HEADERS[language]]
+        for row in rows[1:]:
+            padded = row + [""] * (12 - len(row))
+            padded = padded[:12]
+            padded[1] = self._display_type(self._canonical_type(padded[1]), language)
+            padded[3] = self._display_category(self._canonical_category(padded[3]), language)
+            localized_rows.append(padded)
+        ws.clear()
+        ws.update(f"A1:L{len(localized_rows)}", localized_rows)
+        self._setup_tx_sheet(ws, language)
+
+    def _localize_budget_sheet(self, ws, language: str) -> None:
+        plan_month = ""
+        project_accumulated = 0.0
+        plan = {}
+        try:
+            cell = (ws.acell("F1").value or "").replace("📅", "").strip()
+            if len(cell) == 7 and cell[4] == "-":
+                plan_month = cell
+        except Exception:
+            pass
+        if plan_month:
+            try:
+                plan = self.get_budget_plan(plan_month)
+            except Exception:
+                plan = {}
+            try:
+                project_accumulated = float(ws.acell(f"C{self._get_project_budget_row()}").value or 0)
+            except Exception:
+                project_accumulated = 0.0
+
+        ws.clear()
+        self._setup_budget_sheet(ws, language)
+        if plan_month and plan:
+            self.set_budget_plan(
+                month=plan_month,
+                income=plan.get("income", 0),
+                red_limits=plan.get("red", {}),
+                yellow_limit=plan.get("yellow", 0),
+                green_limit=plan.get("green", 0),
+            )
+            ws.update(f"C{self._get_project_budget_row()}", [[project_accumulated]])
+            self.update_budget_fact(plan_month)
+
+    def _localize_history_sheet(self, ws, language: str) -> None:
+        records = [self._normalize_history_record(record) for record in ws.get_all_records()]
+        ws.clear()
+        self._setup_history_sheet(ws, language)
+        if not records:
+            return
+        rows = [
+            [
+                record["month"],
+                record["income"],
+                record["obligatory"],
+                record["fun"],
+                record["one_time"],
+                record["savings"],
+                record["total_expenses"],
+                record["balance"],
+            ]
+            for record in records
+        ]
+        ws.update(f"A2:H{len(rows) + 1}", rows)
+
+    def _localize_settings_sheet(self, ws, language: str) -> None:
+        rows = ws.get_all_values()[1:]
+        self._reset_settings_sheet(ws, language)
+        for row in rows:
+            if row:
+                ws.append_row((row + [""])[:2], value_input_option="USER_ENTERED")
+
     def reset_all_data(self) -> dict:
         if not self.sh:
             raise RuntimeError("Spreadsheet is not connected")
 
-        tx_ws = self.sh.worksheet("Транзакции")
-        budget_ws = self.sh.worksheet("Бюджет")
-        history_ws = self.sh.worksheet("История")
-        settings_ws = self.sh.worksheet("Настройки")
+        tx_ws = self._worksheet("transactions")
+        budget_ws = self._worksheet("budget")
+        history_ws = self._worksheet("history")
+        settings_ws = self._worksheet("settings")
 
         tx_ws.clear()
-        self._setup_tx_sheet(tx_ws)
+        self._setup_tx_sheet(tx_ws, DEFAULT_SHEET_LANGUAGE)
 
         budget_ws.clear()
-        self._setup_budget_sheet(budget_ws)
+        self._setup_budget_sheet(budget_ws, DEFAULT_SHEET_LANGUAGE)
 
         history_ws.clear()
-        self._setup_history_sheet(history_ws)
+        self._setup_history_sheet(history_ws, DEFAULT_SHEET_LANGUAGE)
 
-        self._reset_settings_sheet(settings_ws)
+        self._reset_settings_sheet(settings_ws, DEFAULT_SHEET_LANGUAGE)
+        tx_ws.update_title(self._sheet_title("transactions", DEFAULT_SHEET_LANGUAGE))
+        budget_ws.update_title(self._sheet_title("budget", DEFAULT_SHEET_LANGUAGE))
+        history_ws.update_title(self._sheet_title("history", DEFAULT_SHEET_LANGUAGE))
+        settings_ws.update_title(self._sheet_title("settings", DEFAULT_SHEET_LANGUAGE))
+        self.sheet_language = DEFAULT_SHEET_LANGUAGE
 
         return {"success": True, "spreadsheet_url": self.get_spreadsheet_url()}
 
     # ─── Sheet Setup ───────────────────────────────────────────────────────────
 
-    def _setup_tx_sheet(self, ws):
-        headers = ["Дата", "Тип", "Сумма", "Категория", "Описание", "Валюта",
-                   "Неделя", "Месяц", "Квартал", "Полугодие", "Год", "Добавлено"]
+    def _setup_tx_sheet(self, ws, language: str | None = None):
+        headers = TX_HEADERS[self._normalize_sheet_language(language)]
         try:
             if ws.acell("A1").value == headers[0]:
                 return
@@ -201,12 +509,14 @@ class FinanceSheets:
         r["proj_row"] = r["inc_row"] + 1
         return r
 
-    def _setup_budget_sheet(self, ws):
+    def _setup_budget_sheet(self, ws, language: str | None = None):
         """Три цветных блока бюджета + доходы/проекты."""
+        lang = self._normalize_sheet_language(language)
+        text = BUDGET_TEXT[lang]
         L = self._get_row_layout()
         ws.freeze(rows=1)
         # Title row
-        ws.update("A1:F1", [["Категория", "Лимит", "Факт (авто)", "Остаток", "Зона", "Примечание"]])
+        ws.update("A1:F1", [text["header"]])
         ws.format("A1:F1", {
             "backgroundColor": {"red": 0.2, "green": 0.2, "blue": 0.2},
             "textFormat": {"bold": True, "foregroundColor": {"red": 1, "green": 1, "blue": 1}},
@@ -214,19 +524,19 @@ class FinanceSheets:
 
         # 🔴 Red zone
         r_h = L["red_header"]
-        ws.update(f"A{r_h}:F{r_h}", [["🔴 КРАСНАя ЗОНА — Обязательное", "", "", "", "", ""]])
+        ws.update(f"A{r_h}:F{r_h}", [[text["red_header"], "", "", "", "", ""]])
         ws.format(f"A{r_h}:F{r_h}", {
             "backgroundColor": {"red": 0.95, "green": 0.8, "blue": 0.8},
             "textFormat": {"bold": True, "foregroundColor": {"red": 0.6, "green": 0.1, "blue": 0.1}},
         })
         for i, cat in enumerate(RED_ZONE_CATEGORIES):
             row = L["red_start"] + i
-            ws.update(f"A{row}:F{row}", [[cat, 0, 0, f"=B{row}-C{row}", "red", ""]])
+            ws.update(f"A{row}:F{row}", [[self._display_category(cat, lang), 0, 0, f"=B{row}-C{row}", "red", ""]])
         ws.format(f"A{L['red_start']}:F{L['red_end']}", {
             "backgroundColor": {"red": 1.0, "green": 0.93, "blue": 0.93},
         })
         r_it = L["red_itogo"]
-        ws.update(f"A{r_it}:F{r_it}", [["ИТОГО 🔴",
+        ws.update(f"A{r_it}:F{r_it}", [[text["red_total"],
             f"=SUM(B{L['red_start']}:B{L['red_end']})",
             f"=SUM(C{L['red_start']}:C{L['red_end']})",
             f"=B{r_it}-C{r_it}", "", ""]])
@@ -234,19 +544,19 @@ class FinanceSheets:
 
         # 🟡 Yellow zone
         y_h = L["yellow_header"]
-        ws.update(f"A{y_h}:F{y_h}", [["🟡 ЖЁЛТАЯ ЗОНА — Досуг, питание, гулянки", "", "", "", "", ""]])
+        ws.update(f"A{y_h}:F{y_h}", [[text["yellow_header"], "", "", "", "", ""]])
         ws.format(f"A{y_h}:F{y_h}", {
             "backgroundColor": {"red": 1.0, "green": 0.95, "blue": 0.7},
             "textFormat": {"bold": True, "foregroundColor": {"red": 0.5, "green": 0.35, "blue": 0.0}},
         })
         for i, cat in enumerate(YELLOW_ZONE_CATEGORIES):
             row = L["yellow_start"] + i
-            ws.update(f"A{row}:F{row}", [[cat, 0, 0, f"=B{row}-C{row}", "yellow", ""]])
+            ws.update(f"A{row}:F{row}", [[self._display_category(cat, lang), 0, 0, f"=B{row}-C{row}", "yellow", ""]])
         ws.format(f"A{L['yellow_start']}:F{L['yellow_end']}", {
             "backgroundColor": {"red": 1.0, "green": 0.98, "blue": 0.85},
         })
         y_it = L["yellow_itogo"]
-        ws.update(f"A{y_it}:F{y_it}", [["ИТОГО 🟡",
+        ws.update(f"A{y_it}:F{y_it}", [[text["yellow_total"],
             f"=SUM(B{L['yellow_start']}:B{L['yellow_end']})",
             f"=SUM(C{L['yellow_start']}:C{L['yellow_end']})",
             f"=B{y_it}-C{y_it}", "", ""]])
@@ -254,19 +564,19 @@ class FinanceSheets:
 
         # 🟢 Green zone
         g_h = L["green_header"]
-        ws.update(f"A{g_h}:F{g_h}", [["🟢 ЗЕЛЁНАЯ ЗОНА — Разовые расходы", "", "", "", "", ""]])
+        ws.update(f"A{g_h}:F{g_h}", [[text["green_header"], "", "", "", "", ""]])
         ws.format(f"A{g_h}:F{g_h}", {
             "backgroundColor": {"red": 0.8, "green": 0.95, "blue": 0.8},
             "textFormat": {"bold": True, "foregroundColor": {"red": 0.1, "green": 0.45, "blue": 0.1}},
         })
         for i, cat in enumerate(GREEN_ZONE_CATEGORIES):
             row = L["green_start"] + i
-            ws.update(f"A{row}:F{row}", [[cat, 0, 0, f"=B{row}-C{row}", "green", ""]])
+            ws.update(f"A{row}:F{row}", [[self._display_category(cat, lang), 0, 0, f"=B{row}-C{row}", "green", ""]])
         ws.format(f"A{L['green_start']}:F{L['green_end']}", {
             "backgroundColor": {"red": 0.92, "green": 1.0, "blue": 0.92},
         })
         g_it = L["green_itogo"]
-        ws.update(f"A{g_it}:F{g_it}", [["ИТОГО 🟢",
+        ws.update(f"A{g_it}:F{g_it}", [[text["green_total"],
             f"=SUM(B{L['green_start']}:B{L['green_end']})",
             f"=SUM(C{L['green_start']}:C{L['green_end']})",
             f"=B{g_it}-C{g_it}", "", ""]])
@@ -274,29 +584,29 @@ class FinanceSheets:
 
         # 💰 Income + Projects block
         i_h = L["inc_header"]
-        ws.update(f"A{i_h}:F{i_h}", [["💰 ДОХОДЫ И ПРОЕКТЫ", "", "", "", "", ""]])
+        ws.update(f"A{i_h}:F{i_h}", [[text["income_block"], "", "", "", "", ""]])
         ws.format(f"A{i_h}:F{i_h}", {
             "backgroundColor": {"red": 0.8, "green": 0.85, "blue": 0.95},
             "textFormat": {"bold": True},
         })
         i_r = L["inc_row"]
-        ws.update(f"A{i_r}:F{i_r}", [["Доход (план)", 0, 0, "", "", ""]])
+        ws.update(f"A{i_r}:F{i_r}", [[text["planned_income"], 0, 0, "", "", ""]])
         p_r = L["proj_row"]
-        ws.update(f"A{p_r}:F{p_r}", [["💼 Бюджет проектов", 0, 0, "", "", "авто: 10% от расходов"]])
+        ws.update(f"A{p_r}:F{p_r}", [[text["project_budget"], 0, 0, "", "", text["project_note"]]])
         ws.format(f"A{p_r}:F{p_r}", {
             "backgroundColor": {"red": 0.85, "green": 0.78, "blue": 0.95},
             "textFormat": {"bold": True},
         })
 
-    def _setup_history_sheet(self, ws):
-        headers = ["Месяц", "Доходы", "Обязательное", "Гулянки", "Разовые", "Всего расходов", "Баланс"]
+    def _setup_history_sheet(self, ws, language: str | None = None):
+        headers = HISTORY_HEADERS[self._normalize_sheet_language(language)]
         try:
             if ws.acell("A1").value == headers[0]:
                 return
         except Exception:
             pass
-        ws.update("A1:G1", [headers])
-        ws.format("A1:G1", {
+        ws.update("A1:H1", [headers])
+        ws.format("A1:H1", {
             "backgroundColor": {"red": 0.2, "green": 0.7, "blue": 0.3},
             "textFormat": {"bold": True, "foregroundColor": {"red": 1, "green": 1, "blue": 1}},
         })
@@ -305,7 +615,7 @@ class FinanceSheets:
     # ─── Budget Plan Management ─────────────────────────────────────────────────
 
     def _get_budget_ws(self):
-        return self.sh.worksheet("Бюджет")
+        return self._worksheet("budget")
 
     def set_budget_plan(self, month: str, income: float,
                         red_limits: dict, yellow_limit: float, green_limit: float) -> dict:
@@ -406,14 +716,14 @@ class FinanceSheets:
         """Recalculate fact column in budget sheet from transactions."""
         if not self.has_budget_for_month(month):
             return
-        ws_tx = self.sh.worksheet("Транзакции")
-        all_tx = ws_tx.get_all_records()
-        month_tx = [r for r in all_tx if r.get("Месяц") == month]
+        ws_tx = self._worksheet("transactions")
+        all_tx = [self._normalize_tx_record(r) for r in ws_tx.get_all_records()]
+        month_tx = [r for r in all_tx if r.get("month") == month]
 
-        def _sum(cat_list, tx_type="Расход"):
+        def _sum(cat_list, tx_type="expense"):
             return sum(
-                float(str(r.get("Сумма", 0)).replace(",", "."))
-                for r in month_tx if r.get("Тип") == tx_type and r.get("Категория") in cat_list
+                float(str(r.get("amount", 0)).replace(",", "."))
+                for r in month_tx if r.get("type") == tx_type and r.get("category") in cat_list
             )
 
         ws_b = self._get_budget_ws()
@@ -435,14 +745,14 @@ class FinanceSheets:
             ws_b.update(f"C{row}", [[round(_sum([cat]), 2)]])
 
         # Income fact
-        income_fact = _sum(INCOME_CATEGORIES, "Доход")
+        income_fact = _sum(INCOME_CATEGORIES, "income")
         ws_b.update(f"C{L['inc_row']}", [[round(income_fact, 2)]])
 
     # ─── Write transactions ─────────────────────────────────────────────────────
 
     def add_transaction(self, amount: float, category: str, description: str,
                         trans_type: str, trans_date: Optional[str] = None) -> dict:
-        ws = self.sh.worksheet("Транзакции")
+        ws = self._worksheet("transactions")
         now = datetime.datetime.now()
 
         if trans_date is None:
@@ -460,7 +770,11 @@ class FinanceSheets:
         half_str = f"{dt.year}-H1" if dt.month <= 6 else f"{dt.year}-H2"
 
         row = [
-            trans_date, trans_type, round(float(amount), 2), category, description,
+            trans_date,
+            self._display_type(self._canonical_type(trans_type), self.sheet_language),
+            round(float(amount), 2),
+            self._display_category(self._canonical_category(category), self.sheet_language),
+            description,
             self.currency, week_str, month_str, quarter_str, half_str, str(dt.year),
             now.strftime("%d.%m.%Y %H:%M"),
         ]
@@ -468,16 +782,16 @@ class FinanceSheets:
 
         # Auto-allocate 10% of every expense to project budget
         contribution = 0.0
-        if trans_type == "Расход":
+        if self._canonical_type(trans_type) == "expense":
             contribution = round(float(amount) * 0.10, 2)
             self._add_to_project_budget(contribution)
 
         result = {
             "success": True,
             "date": trans_date,
-            "type": trans_type,
+            "type": self._canonical_type(trans_type),
             "amount": round(float(amount), 2),
-            "category": category,
+            "category": self._canonical_category(category),
             "description": description,
             "zone": CATEGORY_TO_ZONE.get(category, "unknown"),
             "affected_month": month_str,  # caller should sync budget fact once
@@ -489,7 +803,7 @@ class FinanceSheets:
     # ─── Search / Edit / Delete ─────────────────────────────────────────────────
 
     def search_transactions(self, query: str = "", limit: int = 10) -> list[dict]:
-        ws = self.sh.worksheet("Транзакции")
+        ws = self._worksheet("transactions")
         all_values = ws.get_all_values()
         if len(all_values) <= 1:
             return []
@@ -509,7 +823,7 @@ class FinanceSheets:
         return results
 
     def delete_last_transaction(self) -> dict:
-        ws = self.sh.worksheet("Транзакции")
+        ws = self._worksheet("transactions")
         all_values = ws.get_all_values()
         if len(all_values) <= 1:
             return {"success": False, "message": "Нет транзакций для удаления"}
@@ -523,7 +837,7 @@ class FinanceSheets:
                                               "amount": deleted[2], "category": deleted[3]}}
 
     def delete_transaction(self, row_id: int) -> dict:
-        ws = self.sh.worksheet("Транзакции")
+        ws = self._worksheet("transactions")
         all_values = ws.get_all_values()
         if row_id <= 1 or row_id > len(all_values):
             return {"success": False, "message": "Некорректный ID строки"}
@@ -537,7 +851,7 @@ class FinanceSheets:
 
     def edit_transaction(self, row_id: int, amount: float = None, category: str = None,
                          description: str = None, trans_date: str = None) -> dict:
-        ws = self.sh.worksheet("Транзакции")
+        ws = self._worksheet("transactions")
         all_values = ws.get_all_values()
         if row_id <= 1 or row_id > len(all_values):
             return {"success": False, "message": "Некорректный ID строки"}
@@ -547,7 +861,7 @@ class FinanceSheets:
         if amount is not None:
             row[2] = str(round(float(amount), 2))
         if category is not None:
-            row[3] = category
+            row[3] = self._display_category(self._canonical_category(category), self.sheet_language)
         if description is not None:
             row[4] = description
 
@@ -566,6 +880,8 @@ class FinanceSheets:
             row.extend([""] * (12 - len(row)))
         row[11] = datetime.datetime.now().strftime("%d.%m.%Y %H:%M")
 
+        if len(row) > 1:
+            row[1] = self._display_type(self._canonical_type(row[1]), self.sheet_language)
         ws.update(f"A{row_id}:L{row_id}", [row[:12]])
         month_str = row[7] if len(row) > 7 else datetime.datetime.now().strftime("%Y-%m")
         self._sync_history(month_str)
@@ -575,31 +891,32 @@ class FinanceSheets:
     # ─── Aggregations ───────────────────────────────────────────────────────────
 
     def _sync_history(self, month: str):
-        records = self.sh.worksheet("Транзакции").get_all_records()
-        month_records = [r for r in records if r.get("Месяц") == month]
+        records = [self._normalize_tx_record(r) for r in self._worksheet("transactions").get_all_records()]
+        month_records = [r for r in records if r.get("month") == month]
 
         def _s(cat_filter=None, type_filter=None):
             return sum(
-                float(str(r.get("Сумма", 0)).replace(",", "."))
+                float(str(r.get("amount", 0)).replace(",", "."))
                 for r in month_records
-                if (type_filter is None or r.get("Тип") == type_filter)
-                and (cat_filter is None or r.get("Категория") in cat_filter)
+                if (type_filter is None or r.get("type") == type_filter)
+                and (cat_filter is None or r.get("category") in cat_filter)
             )
 
-        income = _s(type_filter="Доход")
-        obligatory = _s(cat_filter=RED_ZONE_CATEGORIES, type_filter="Расход")
-        fun = _s(cat_filter=YELLOW_ZONE_CATEGORIES, type_filter="Расход")
-        one_time = _s(cat_filter=GREEN_ZONE_CATEGORIES, type_filter="Расход")
-        total_exp = obligatory + fun + one_time
+        income = _s(type_filter="income")
+        obligatory = _s(cat_filter=RED_ZONE_CATEGORIES, type_filter="expense")
+        fun = _s(cat_filter=YELLOW_ZONE_CATEGORIES, type_filter="expense")
+        one_time = _s(cat_filter=GREEN_ZONE_CATEGORIES, type_filter="expense")
+        savings = _s(type_filter="savings")
+        total_exp = obligatory + fun + one_time + savings
         balance = income - total_exp
 
-        ws_hist = self.sh.worksheet("История")
-        hist_records = ws_hist.get_all_records()
-        row_idx = next((i + 2 for i, r in enumerate(hist_records) if r.get("Месяц") == month), None)
+        ws_hist = self._worksheet("history")
+        hist_records = [self._normalize_history_record(r) for r in ws_hist.get_all_records()]
+        row_idx = next((i + 2 for i, r in enumerate(hist_records) if r.get("month") == month), None)
         row_data = [month, round(income, 2), round(obligatory, 2), round(fun, 2),
-                    round(one_time, 2), round(total_exp, 2), round(balance, 2)]
+                    round(one_time, 2), round(savings, 2), round(total_exp, 2), round(balance, 2)]
         if row_idx:
-            ws_hist.update(f"A{row_idx}:G{row_idx}", [row_data])
+            ws_hist.update(f"A{row_idx}:H{row_idx}", [row_data])
         else:
             ws_hist.append_row(row_data)
 
@@ -608,17 +925,17 @@ class FinanceSheets:
         month_str = now.strftime("%Y-%m")
         today_str = now.strftime("%d.%m.%Y")
 
-        tx_ws = self.sh.worksheet("Транзакции")
-        all_tx = tx_ws.get_all_records()
-        today_tx = [r for r in all_tx if r.get("Дата") == today_str]
-        today_exp = sum(float(str(r.get("Сумма", 0)).replace(",", "."))
-                        for r in today_tx if r.get("Тип") == "Расход")
+        tx_ws = self._worksheet("transactions")
+        all_tx = [self._normalize_tx_record(r) for r in tx_ws.get_all_records()]
+        today_tx = [r for r in all_tx if r.get("date") == today_str]
+        today_exp = sum(float(str(r.get("amount", 0)).replace(",", "."))
+                        for r in today_tx if r.get("type") == "expense")
 
         plan = self.get_budget_plan(month_str)
 
-        hist_ws = self.sh.worksheet("История")
-        history = hist_ws.get_all_records()
-        current_hist = next((h for h in history if h.get("Месяц") == month_str), {})
+        hist_ws = self._worksheet("history")
+        history = [self._normalize_history_record(r) for r in hist_ws.get_all_records()]
+        current_hist = next((h for h in history if h.get("month") == month_str), {})
 
         recent = list(reversed(all_tx))[:8]
         return {
@@ -634,10 +951,10 @@ class FinanceSheets:
         months: set[str] = set()
 
         try:
-            tx_ws = self.sh.worksheet("Транзакции")
-            all_tx = tx_ws.get_all_records()
+            tx_ws = self._worksheet("transactions")
+            all_tx = [self._normalize_tx_record(r) for r in tx_ws.get_all_records()]
             for r in all_tx:
-                m = str(r.get("Месяц", "")).strip()
+                m = str(r.get("month", "")).strip()
                 if len(m) == 7 and m[4] == "-":
                     months.add(m)
         except Exception:
@@ -656,9 +973,9 @@ class FinanceSheets:
         return sorted(months)
 
     def get_stats_by_month(self, month: str) -> dict:
-        tx_ws = self.sh.worksheet("Транзакции")
-        all_tx = tx_ws.get_all_records()
-        month_tx = [r for r in all_tx if str(r.get("Месяц", "")) == month]
+        tx_ws = self._worksheet("transactions")
+        all_tx = [self._normalize_tx_record(r) for r in tx_ws.get_all_records()]
+        month_tx = [r for r in all_tx if str(r.get("month", "")) == month]
 
         def _to_float(value) -> float:
             try:
@@ -669,14 +986,14 @@ class FinanceSheets:
             except Exception:
                 return 0.0
 
-        income = sum(_to_float(r.get("Сумма")) for r in month_tx if r.get("Тип") == "Доход")
-        red = sum(_to_float(r.get("Сумма")) for r in month_tx
-                  if r.get("Тип") == "Расход" and r.get("Категория") in RED_ZONE_CATEGORIES)
-        yellow = sum(_to_float(r.get("Сумма")) for r in month_tx
-                     if r.get("Тип") == "Расход" and r.get("Категория") in YELLOW_ZONE_CATEGORIES)
-        green = sum(_to_float(r.get("Сумма")) for r in month_tx
-                    if r.get("Тип") == "Расход" and r.get("Категория") in GREEN_ZONE_CATEGORIES)
-        savings = sum(_to_float(r.get("Сумма")) for r in month_tx if r.get("Тип") == "Копилка")
+        income = sum(_to_float(r.get("amount")) for r in month_tx if r.get("type") == "income")
+        red = sum(_to_float(r.get("amount")) for r in month_tx
+                  if r.get("type") == "expense" and r.get("category") in RED_ZONE_CATEGORIES)
+        yellow = sum(_to_float(r.get("amount")) for r in month_tx
+                     if r.get("type") == "expense" and r.get("category") in YELLOW_ZONE_CATEGORIES)
+        green = sum(_to_float(r.get("amount")) for r in month_tx
+                    if r.get("type") == "expense" and r.get("category") in GREEN_ZONE_CATEGORIES)
+        savings = sum(_to_float(r.get("amount")) for r in month_tx if r.get("type") == "savings")
 
         total_expense = red + yellow + green
         balance = income - total_expense
@@ -687,21 +1004,21 @@ class FinanceSheets:
 
         recent = [
             r for r in reversed(all_tx)
-            if str(r.get("Месяц", "")) == month
+            if str(r.get("month", "")) == month
         ][:10]
 
         return {
             "period": month,
             "plan": plan,
             "fact": {
-                "Месяц": month,
-                "Доходы": round(income, 2),
-                "Обязательное": round(red, 2),
-                "Гулянки": round(yellow, 2),
-                "Разовые": round(green, 2),
-                "Копилка": round(savings, 2),
-                "Всего расходов": round(total_expense, 2),
-                "Баланс": round(balance, 2),
+                "month": month,
+                "income": round(income, 2),
+                "obligatory": round(red, 2),
+                "fun": round(yellow, 2),
+                "one_time": round(green, 2),
+                "savings": round(savings, 2),
+                "total_expenses": round(total_expense, 2),
+                "balance": round(balance, 2),
             },
             "recent_tx": recent,
             "transactions_count": len(month_tx),

@@ -14,7 +14,7 @@ def apply_tx_styling(sh: gspread.Spreadsheet, ws: gspread.Worksheet):
                     "booleanRule": {
                         "condition": {
                             "type": "CUSTOM_FORMULA",
-                            "values": [{"userEnteredValue": '=$B2="Доход"'}]
+                            "values": [{"userEnteredValue": '=OR($B2="Income",$B2="Доход")'}]
                         },
                         "format": {
                             "backgroundColor": {"red": 0.8, "green": 0.95, "blue": 0.8},
@@ -32,7 +32,7 @@ def apply_tx_styling(sh: gspread.Spreadsheet, ws: gspread.Worksheet):
                     "booleanRule": {
                         "condition": {
                             "type": "CUSTOM_FORMULA",
-                            "values": [{"userEnteredValue": '=$B2="Расход"'}]
+                            "values": [{"userEnteredValue": '=OR($B2="Expense",$B2="Расход")'}]
                         },
                         "format": {
                             "backgroundColor": {"red": 0.95, "green": 0.8, "blue": 0.8},
@@ -50,7 +50,7 @@ def apply_tx_styling(sh: gspread.Spreadsheet, ws: gspread.Worksheet):
                     "booleanRule": {
                         "condition": {
                             "type": "CUSTOM_FORMULA",
-                            "values": [{"userEnteredValue": '=$B2="Копилка"'}]
+                            "values": [{"userEnteredValue": '=OR($B2="Savings",$B2="Копилка")'}]
                         },
                         "format": {
                             "backgroundColor": {"red": 0.8, "green": 0.85, "blue": 0.95},

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from telegram import Update
+from telegram import Message, Update
 from telegram.ext import CommandHandler, ConversationHandler, ContextTypes, MessageHandler, filters
 
+from app.bot.i18n import localize
 from app.bot.keyboards import main_keyboard
 from app.bot.state import (
     ONB_GREEN,
@@ -15,21 +16,79 @@ from app.bot.state import (
     month_label,
     sheets,
 )
-from app.services.sheets_service import RED_ZONE_CATEGORIES
+from app.services.sheets_service import CATEGORY_LABELS, RED_ZONE_CATEGORIES
 
 
 async def send_welcome(update: Update) -> None:
-    if is_english():
-        text = (
-            "👋 *Findo — Finance AI Assistant*\n\n"
-            "Use the buttons below to open settings or your table."
+    await send_welcome_message(update.message)
+
+
+async def send_welcome_message(message: Message) -> None:
+    await message.reply_text(
+        await localize(
+            "👋 *Findo — Finance AI Assistant*\n\nUse the buttons below to open settings or your table.",
+            "👋 *Findo — Финансовый ИИ-ассистент*\n\nИспользуй кнопки ниже, чтобы открыть настройки или таблицу.",
+        ),
+        parse_mode="Markdown",
+        reply_markup=main_keyboard(),
+    )
+
+
+async def prompt_onboarding_income(message: Message) -> None:
+    month = current_month()
+    await message.reply_text(
+        await localize(
+            f"🗓 *Budget setup for {month}*\n\n"
+            "No budget plan is set for this month yet. Let's configure it.\n\n"
+            "👉 *Step 1/4:* What is your expected income this month? (EUR)",
+            f"🗓 *Настройка бюджета на {month_label()}*\n\n"
+            "Для тебя ещё не заполнен план на этот месяц. Давай настроим!\n\n"
+            "👉 *Шаг 1/4:* Какой ожидаемый доход в этом месяце? (EUR)",
+        ),
+        parse_mode="Markdown",
+    )
+
+
+def set_forced_onboarding_state(ctx: ContextTypes.DEFAULT_TYPE, state: int | None) -> None:
+    if state is None or state == ConversationHandler.END:
+        ctx.user_data.pop("forced_onboarding_state", None)
+        return
+    ctx.user_data["forced_onboarding_state"] = state
+
+
+async def begin_forced_onboarding(message: Message, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    for key in ("onb_income", "onb_red", "onb_yellow", "onb_green"):
+        ctx.user_data.pop(key, None)
+    set_forced_onboarding_state(ctx, ONB_INCOME)
+    await message.reply_text(
+        await localize(
+            "🧹 Reset complete. Starting a fresh setup for you now.",
+            "🧹 Сброс завершён. Начинаем настройку заново.",
         )
-    else:
-        text = (
-            "👋 *Findo — Финансовый ИИ-ассистент*\n\n"
-            "Используй кнопки ниже, чтобы открыть настройки или таблицу."
-        )
-    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=main_keyboard())
+    )
+    await send_welcome_message(message)
+    await prompt_onboarding_income(message)
+
+
+async def continue_forced_onboarding(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> bool:
+    state = ctx.user_data.get("forced_onboarding_state")
+    if state is None:
+        return False
+
+    handlers = {
+        ONB_INCOME: onb_income,
+        ONB_RED: onb_red,
+        ONB_YELLOW: onb_yellow,
+        ONB_GREEN: onb_green,
+    }
+    handler = handlers.get(state)
+    if handler is None:
+        set_forced_onboarding_state(ctx, None)
+        return False
+
+    next_state = await handler(update, ctx)
+    set_forced_onboarding_state(ctx, next_state)
+    return True
 
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -39,20 +98,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     month = current_month()
     if not sheets.has_budget_for_month(month):
-        if is_english():
-            await update.message.reply_text(
-                f"🗓 *Budget setup for {month}*\n\n"
-                "No budget plan is set for this month yet. Let's configure it.\n\n"
-                "👉 *Step 1/4:* What is your expected income this month? (EUR)",
-                parse_mode="Markdown",
-            )
-        else:
-            await update.message.reply_text(
-                f"🗓 *Настройка бюджета на {month_label()}*\n\n"
-                "Для тебя ещё не заполнен план на этот месяц. Давай настроим!\n\n"
-                "👉 *Шаг 1/4:* Какой ожидаемый доход в этом месяце? (EUR)",
-                parse_mode="Markdown",
-            )
+        await prompt_onboarding_income(update.message)
         return ONB_INCOME
 
     await send_welcome(update)
@@ -89,7 +135,7 @@ async def onb_income(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
         return ONB_INCOME
 
-    categories = ", ".join(RED_ZONE_CATEGORIES)
+    categories = ", ".join(CATEGORY_LABELS["en"][category] for category in RED_ZONE_CATEGORIES)
     if is_english():
         await update.message.reply_text(
             f"✅ Income: {ctx.user_data['onb_income']}€\n\n"
@@ -229,6 +275,7 @@ async def onb_green(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def onb_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    set_forced_onboarding_state(ctx, None)
     await update.message.reply_text(
         "❌ Setup cancelled." if is_english() else "❌ Настройка отменена.",
         reply_markup=main_keyboard(),

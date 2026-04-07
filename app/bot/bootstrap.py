@@ -26,7 +26,7 @@ async def post_init(app: Application) -> None:
     log.info("Connecting to Google Sheets…")
     sheets.connect()
 
-    runtime_state.language = sheets.get_setting("language", runtime_state.language) or config.LANGUAGE
+    runtime_state.language = "en"
     runtime_state.currency = sheets.get_setting("currency", runtime_state.currency) or config.CURRENCY
     runtime_state.ai_model = sheets.get_setting("ai_model", runtime_state.ai_model) or config.AI_MODEL
     runtime_state.timezone = sheets.get_setting("timezone", runtime_state.timezone) or config.TIMEZONE
@@ -37,7 +37,7 @@ async def post_init(app: Application) -> None:
         runtime_state.ai_model,
         sheets,
         currency=runtime_state.currency,
-        language=runtime_state.language,
+        language="en",
     )
     set_agent(agent)
     log.info("Agent initialized ✓")

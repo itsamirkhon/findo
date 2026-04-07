@@ -3,93 +3,58 @@ from __future__ import annotations
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.core.runtime import runtime_settings as runtime_state
-from app.bot.state import is_english, sheets
+from app.bot.state import sheets
 
 
 def main_keyboard() -> InlineKeyboardMarkup:
     url = sheets.get_spreadsheet_url()
-    if is_english():
-        return InlineKeyboardMarkup(
-            [[
+    return InlineKeyboardMarkup(
+        [
+            [
                 InlineKeyboardButton("⚙️ Settings", callback_data="settings:open"),
                 InlineKeyboardButton("📁 Open Table", url=url),
-            ]]
-        )
-    return InlineKeyboardMarkup(
-        [[
-            InlineKeyboardButton("⚙️ Настройки", callback_data="settings:open"),
-            InlineKeyboardButton("📁 Открыть таблицу", url=url),
-        ]]
+            ],
+            [
+                InlineKeyboardButton("ℹ️ Info", callback_data="info:open"),
+            ],
+        ]
     )
 
 
 def settings_keyboard() -> InlineKeyboardMarkup:
-    if is_english():
-        return InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton("🌐 Language", callback_data="settings:language"),
-                    InlineKeyboardButton("💱 Currency", callback_data="settings:currency"),
-                ],
-                [
-                    InlineKeyboardButton("🧠 AI Model", callback_data="settings:ai_model"),
-                    InlineKeyboardButton("🕒 Timezone", callback_data="settings:timezone"),
-                ],
-                [InlineKeyboardButton("🔄 Refresh", callback_data="settings:refresh")],
-            ]
-        )
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("🌐 Язык", callback_data="settings:language"),
-                InlineKeyboardButton("💱 Валюта", callback_data="settings:currency"),
+                InlineKeyboardButton("💱 Currency", callback_data="settings:currency"),
+                InlineKeyboardButton("🧠 AI Model", callback_data="settings:ai_model"),
             ],
             [
-                InlineKeyboardButton("🧠 AI модель", callback_data="settings:ai_model"),
-                InlineKeyboardButton("🕒 Таймзона", callback_data="settings:timezone"),
+                InlineKeyboardButton("🕒 Timezone", callback_data="settings:timezone"),
             ],
-            [InlineKeyboardButton("🔄 Обновить", callback_data="settings:refresh")],
+            [InlineKeyboardButton("🔄 Refresh", callback_data="settings:refresh")],
+            [InlineKeyboardButton("✅ Save and Close", callback_data="settings:close")],
         ]
     )
 
 
 def settings_summary() -> str:
-    if is_english():
-        return (
-            "⚙️ *Current Settings*\n\n"
-            f"🌐 Language: `{runtime_state.language}`\n"
-            f"💱 Currency: `{runtime_state.currency}`\n"
-            f"🧠 AI Model: `{runtime_state.ai_model}`\n"
-            f"🕒 Timezone: `{runtime_state.timezone}`\n"
-        )
     return (
-        "⚙️ *Текущие настройки*\n\n"
-        f"🌐 Язык: `{runtime_state.language}`\n"
-        f"💱 Валюта: `{runtime_state.currency}`\n"
-        f"🧠 AI модель: `{runtime_state.ai_model}`\n"
-        f"🕒 Таймзона: `{runtime_state.timezone}`\n"
+        "⚙️ *Current Settings*\n\n"
+        "🌐 Language: `en`\n"
+        f"💱 Currency: `{runtime_state.currency}`\n"
+        f"🧠 AI Model: `{runtime_state.ai_model}`\n"
+        f"🕒 Timezone: `{runtime_state.timezone}`\n"
     )
 
 
 def clear_confirmation_keyboard(user_id: int) -> InlineKeyboardMarkup:
-    if is_english():
-        return InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton("✅ Yes, reset everything", callback_data=f"clear:confirm:{user_id}"),
-                ],
-                [
-                    InlineKeyboardButton("❌ Cancel", callback_data=f"clear:cancel:{user_id}"),
-                ],
-            ]
-        )
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("✅ Да, очистить всё", callback_data=f"clear:confirm:{user_id}"),
+                InlineKeyboardButton("✅ Yes, reset everything", callback_data=f"clear:confirm:{user_id}"),
             ],
             [
-                InlineKeyboardButton("❌ Отмена", callback_data=f"clear:cancel:{user_id}"),
+                InlineKeyboardButton("❌ Cancel", callback_data=f"clear:cancel:{user_id}"),
             ],
         ]
     )
