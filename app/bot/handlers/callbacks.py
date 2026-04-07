@@ -4,7 +4,15 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from app.bot.keyboards import settings_keyboard, settings_summary
-from app.bot.state import allowed, get_agent, is_english, log
+from app.bot.state import (
+    allowed,
+    get_agent,
+    histories,
+    is_english,
+    log,
+    reset_runtime_settings_to_defaults,
+    sheets,
+)
 from app.bot.streaming import stream_text_reply
 
 
@@ -13,6 +21,40 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> Non
     await query.answer()
     if not allowed(query.from_user.id):
         return
+
+    if query.data and query.data.startswith("clear:"):
+        parts = query.data.split(":")
+        action = parts[1] if len(parts) > 1 else ""
+        owner_id = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else None
+
+        if owner_id is not None and query.from_user.id != owner_id:
+            await query.message.reply_text(
+                "⚠️ Only the user who requested the reset can confirm it."
+                if is_english()
+                else "⚠️ Подтвердить сброс может только тот пользователь, который его запросил."
+            )
+            return
+
+        if action == "cancel":
+            await query.message.reply_text(
+                "✅ Reset cancelled." if is_english() else "✅ Сброс отменён."
+            )
+            return
+
+        if action == "confirm":
+            sheets.reset_all_data()
+            histories.clear()
+            ctx.application.user_data.clear()
+            ctx.application.chat_data.clear()
+            reset_runtime_settings_to_defaults()
+            await query.message.reply_text(
+                (
+                    "🧹 Everything was reset.\n\nThe spreadsheet, chat memory, budget data, and custom settings were cleared. The bot is back to a fresh state."
+                )
+                if is_english()
+                else "🧹 Всё было очищено.\n\nТаблица, память чата, бюджетные данные и кастомные настройки сброшены. Бот снова в состоянии с нуля."
+            )
+            return
 
     if query.data and query.data.startswith("settings:"):
         parts = query.data.split(":")

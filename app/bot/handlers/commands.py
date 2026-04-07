@@ -4,7 +4,7 @@ import pytz
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from app.bot.keyboards import settings_keyboard, settings_summary
+from app.bot.keyboards import clear_confirmation_keyboard, settings_keyboard, settings_summary
 from app.bot.state import allowed, apply_runtime_setting, histories, is_english, sheets
 from app.bot.streaming import reply_agent_stream
 
@@ -62,9 +62,13 @@ async def cmd_sheet(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 async def cmd_clear(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not allowed(update.effective_user.id):
         return
-    histories[update.effective_user.id] = []
     await update.message.reply_text(
-        "🗑 Chat history cleared." if is_english() else "🗑 История диалога очищена."
+        (
+            "⚠️ This will fully reset the bot: chat history, all spreadsheet data, budget plan, and custom settings.\n\nAre you sure?"
+            if is_english()
+            else "⚠️ Это полностью сбросит бота: историю чата, все данные в таблице, бюджетный план и кастомные настройки.\n\nТы уверен?"
+        ),
+        reply_markup=clear_confirmation_keyboard(update.effective_user.id),
     )
 
 

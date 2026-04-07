@@ -73,3 +73,18 @@ def apply_runtime_setting(key: str, value: str) -> None:
             currency=runtime_state.currency,
             language=runtime_state.language,
         )
+
+
+def reset_runtime_settings_to_defaults() -> None:
+    runtime_state.language = config.LANGUAGE
+    runtime_state.currency = config.CURRENCY
+    runtime_state.ai_model = config.AI_MODEL
+    runtime_state.timezone = config.TIMEZONE
+    sheets.currency = config.CURRENCY
+
+    if agent:
+        agent.update_preferences(
+            model=runtime_state.ai_model,
+            currency=runtime_state.currency,
+            language=runtime_state.language,
+        )

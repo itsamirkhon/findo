@@ -94,8 +94,7 @@ class FinanceSheets:
         ws3 = self.sh.add_worksheet("История", rows=100, cols=10)
         self._setup_history_sheet(ws3)
         ws4 = self.sh.add_worksheet("Настройки", rows=100, cols=2)
-        ws4.update("A1:B1", [["Ключ", "Значение"]])
-        ws4.freeze(rows=1)
+        self._reset_settings_sheet(ws4)
 
     def _ensure_sheets(self):
         titles = [ws.title for ws in self.sh.worksheets()]
@@ -110,11 +109,15 @@ class FinanceSheets:
             self._setup_history_sheet(ws)
         if "Настройки" not in titles:
             ws = self.sh.add_worksheet("Настройки", rows=100, cols=2)
-            ws.update("A1:B1", [["Ключ", "Значение"]])
-            ws.freeze(rows=1)
+            self._reset_settings_sheet(ws)
 
     def _get_settings_ws(self):
         return self.sh.worksheet("Настройки")
+
+    def _reset_settings_sheet(self, ws) -> None:
+        ws.clear()
+        ws.update("A1:B1", [["Ключ", "Значение"]])
+        ws.freeze(rows=1)
 
     def get_setting(self, key: str, default: str = "") -> str:
         ws = self._get_settings_ws()
@@ -133,6 +136,28 @@ class FinanceSheets:
                 return {"success": True, "key": key, "value": value}
         ws.append_row([key, str(value)], value_input_option="USER_ENTERED")
         return {"success": True, "key": key, "value": value}
+
+    def reset_all_data(self) -> dict:
+        if not self.sh:
+            raise RuntimeError("Spreadsheet is not connected")
+
+        tx_ws = self.sh.worksheet("Транзакции")
+        budget_ws = self.sh.worksheet("Бюджет")
+        history_ws = self.sh.worksheet("История")
+        settings_ws = self.sh.worksheet("Настройки")
+
+        tx_ws.clear()
+        self._setup_tx_sheet(tx_ws)
+
+        budget_ws.clear()
+        self._setup_budget_sheet(budget_ws)
+
+        history_ws.clear()
+        self._setup_history_sheet(history_ws)
+
+        self._reset_settings_sheet(settings_ws)
+
+        return {"success": True, "spreadsheet_url": self.get_spreadsheet_url()}
 
     # ─── Sheet Setup ───────────────────────────────────────────────────────────
 

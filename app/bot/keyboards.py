@@ -69,3 +69,27 @@ def settings_summary() -> str:
         f"🧠 AI модель: `{runtime_state.ai_model}`\n"
         f"🕒 Таймзона: `{runtime_state.timezone}`\n"
     )
+
+
+def clear_confirmation_keyboard(user_id: int) -> InlineKeyboardMarkup:
+    if is_english():
+        return InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("✅ Yes, reset everything", callback_data=f"clear:confirm:{user_id}"),
+                ],
+                [
+                    InlineKeyboardButton("❌ Cancel", callback_data=f"clear:cancel:{user_id}"),
+                ],
+            ]
+        )
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("✅ Да, очистить всё", callback_data=f"clear:confirm:{user_id}"),
+            ],
+            [
+                InlineKeyboardButton("❌ Отмена", callback_data=f"clear:cancel:{user_id}"),
+            ],
+        ]
+    )
