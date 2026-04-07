@@ -267,9 +267,7 @@ class FinanceAgent:
                 case "get_dashboard":
                     return self.sheets.get_dashboard_data()
                 case "get_stats":
-                    # Let agent read from dashboard logic just filtered by month (not fully implemented in sheets.py but reuse is possible)
-                    # Returning dashboard data which has 'recent_tx' and 'fact'/'plan' for month
-                    return self.sheets.get_dashboard_data()
+                    return self.sheets.get_stats_by_month(args["month"])
                 case "search_transactions":
                     return {"transactions": self.sheets.search_transactions(query=args.get("query", ""))}
                 case "delete_transaction":

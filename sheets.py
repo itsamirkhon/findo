@@ -534,6 +534,56 @@ class FinanceSheets:
             "has_plan": bool(plan),
         }
 
+    def get_stats_by_month(self, month: str) -> dict:
+        tx_ws = self.sh.worksheet("Транзакции")
+        all_tx = tx_ws.get_all_records()
+        month_tx = [r for r in all_tx if str(r.get("Месяц", "")) == month]
+
+        def _to_float(value) -> float:
+            try:
+                if value is None:
+                    return 0.0
+                cleaned = str(value).replace(" ", "").replace(",", ".")
+                return float(cleaned or 0)
+            except Exception:
+                return 0.0
+
+        income = sum(_to_float(r.get("Сумма")) for r in month_tx if r.get("Тип") == "Доход")
+        red = sum(_to_float(r.get("Сумма")) for r in month_tx
+                  if r.get("Тип") == "Расход" and r.get("Категория") in RED_ZONE_CATEGORIES)
+        yellow = sum(_to_float(r.get("Сумма")) for r in month_tx
+                     if r.get("Тип") == "Расход" and r.get("Категория") in YELLOW_ZONE_CATEGORIES)
+        green = sum(_to_float(r.get("Сумма")) for r in month_tx
+                    if r.get("Тип") == "Расход" and r.get("Категория") in GREEN_ZONE_CATEGORIES)
+        savings = sum(_to_float(r.get("Сумма")) for r in month_tx if r.get("Тип") == "Копилка")
+
+        total_expense = red + yellow + green
+        balance = income - total_expense
+        plan = self.get_budget_plan(month)
+
+        recent = [
+            r for r in reversed(all_tx)
+            if str(r.get("Месяц", "")) == month
+        ][:10]
+
+        return {
+            "period": month,
+            "plan": plan,
+            "fact": {
+                "Месяц": month,
+                "Доходы": round(income, 2),
+                "Обязательное": round(red, 2),
+                "Гулянки": round(yellow, 2),
+                "Разовые": round(green, 2),
+                "Копилка": round(savings, 2),
+                "Всего расходов": round(total_expense, 2),
+                "Баланс": round(balance, 2),
+            },
+            "recent_tx": recent,
+            "transactions_count": len(month_tx),
+            "has_plan": bool(plan),
+        }
+
     def get_spreadsheet_url(self) -> str:
         if self.sh:
             return f"https://docs.google.com/spreadsheets/d/{self.sh.id}"
