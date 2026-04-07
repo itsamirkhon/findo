@@ -12,9 +12,10 @@ from sheets import FinanceSheets
 WRITE_TOOLS = {"add_expense", "add_income", "add_savings", "set_plan",
                "delete_transaction", "delete_last", "edit_transaction"}
 
-def _build_system_prompt(currency: str = "EUR") -> str:
+def _build_system_prompt(currency: str = "EUR", language: str = "ru") -> str:
     today = datetime.datetime.now()
     today_iso = today.strftime("%Y-%m-%d")
+    preferred_language = "русском" if language == "ru" else "английском"
     return f"""Ты — личный финансовый ИИ-ассистент Амирхона. Валюта: **{currency}**.
 Ведёшь учёт доходов, расходов и бюджета в Google Sheets по системе трёх цветных зон.
 Сегодня: {today_iso}
@@ -31,7 +32,7 @@ def _build_system_prompt(currency: str = "EUR") -> str:
 💰 ДОХОДЫ бывают: Зарплата, Фриланс, Прочее
 
 Правила:
-- Общайся только на русском языке, используй эмодзи
+- Отвечай только на {preferred_language} языке, используй эмодзи
 - Всегда указывай суммы с знаком валюты: {currency} (не рубли, не доллары!)
 - При вводе расхода — распредели в нужную зону автоматически
 - При слове «обед», «ресторан», «кофе», «бар», «встреча» → Гулянки 🟡
@@ -200,12 +201,25 @@ TOOLS = [
 
 
 class FinanceAgent:
-    def __init__(self, api_key: str, model: str, sheets: FinanceSheets, currency: str = "EUR"):
+    def __init__(self, api_key: str, model: str, sheets: FinanceSheets,
+                 currency: str = "EUR", language: str = "ru"):
         self.api_key = api_key
         self.model = model
         self.sheets = sheets
         self.currency = currency
-        self.system_prompt = _build_system_prompt(currency)
+        self.language = language
+        self.system_prompt = _build_system_prompt(currency, language)
+
+    def update_preferences(self, *, model: str | None = None,
+                           currency: str | None = None,
+                           language: str | None = None):
+        if model:
+            self.model = model
+        if currency:
+            self.currency = currency
+        if language:
+            self.language = language
+        self.system_prompt = _build_system_prompt(self.currency, self.language)
 
     def _normalize_stats_month(self, month: str | None) -> str:
         now = datetime.datetime.now()

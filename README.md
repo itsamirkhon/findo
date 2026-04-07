@@ -132,6 +132,11 @@ Monthly rollup: income, zone totals, balance per month.
 | `SPREADSHEET_NAME` | ✅ | Name of your Google Spreadsheet |
 | `CURRENCY` | ✅ | Currency symbol: `EUR`, `USD`, `RUB`, `UZS` |
 | `ALLOWED_USERS` | ❌ | Comma-separated user IDs. Empty = public |
+| `TRANSCRIBE_API_KEY` | ❌ | API key for voice-to-text (OpenRouter key; defaults to `OPENROUTER_API_KEY`) |
+| `TRANSCRIBE_MODEL` | ❌ | STT model (default: `whisper-1`) |
+| `VOICE_DIRECT_MODE` | ❌ | `true/false`. If `true`, sends audio directly to multimodal model first |
+| `VOICE_DIRECT_MODEL` | ❌ | Multimodal model for direct audio mode (default: `google/gemini-2.5-flash`) |
+| `DOCUMENT_MODEL` | ❌ | Multimodal model for receipts/invoices from images/PDF context |
 
 ---
 

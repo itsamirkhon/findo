@@ -129,6 +129,13 @@ CURRENCY=USD
 
 # Your Telegram ID from Step 1 (so the bot ignores other people)
 ALLOWED_USERS=123456789
+
+# (Optional) Voice message support
+TRANSCRIBE_API_KEY=sk-xxxxxxxxxxxxxxxx
+TRANSCRIBE_MODEL=whisper-1
+VOICE_DIRECT_MODE=false
+VOICE_DIRECT_MODEL=google/gemini-2.5-flash
+DOCUMENT_MODEL=google/gemini-2.5-flash
 ```
 
 *Make sure that the `credentials.json` file is placed in the exact same folder as `bot.py` and `.env`!*

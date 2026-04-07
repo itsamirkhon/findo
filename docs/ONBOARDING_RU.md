@@ -129,6 +129,13 @@ CURRENCY=RUB
 
 # Ваш Telegram ID из Шага 1 (чтобы бот игнорировал чужих людей)
 ALLOWED_USERS=123456789
+
+# (Опционально) Поддержка голосовых сообщений
+TRANSCRIBE_API_KEY=sk-xxxxxxxxxxxxxxxx
+TRANSCRIBE_MODEL=whisper-1
+VOICE_DIRECT_MODE=false
+VOICE_DIRECT_MODEL=google/gemini-2.5-flash
+DOCUMENT_MODEL=google/gemini-2.5-flash
 ```
 
 *Не забудьте убедиться, что файл `credentials.json` лежит в одной папке с `bot.py` и `.env`!*
