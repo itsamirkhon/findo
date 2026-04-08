@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import datetime
+import uuid
+from calendar import monthrange
 from typing import Optional
 
 import gspread
@@ -43,12 +45,16 @@ SHEET_TITLES = {
         "budget": "Budget",
         "history": "History",
         "settings": "Settings",
+        "expected_payments": "Expected Payments",
+        "payment_status": "Payment Status",
     },
     "ru": {
         "transactions": "Транзакции",
         "budget": "Бюджет",
         "history": "История",
         "settings": "Настройки",
+        "expected_payments": "Expected Payments",
+        "payment_status": "Payment Status",
     },
 }
 
@@ -90,6 +96,30 @@ SETTINGS_HEADERS = {
     "en": ["Key", "Value"],
     "ru": ["Ключ", "Значение"],
 }
+
+EXPECTED_PAYMENTS_HEADERS = [
+    "id",
+    "name",
+    "category",
+    "amount",
+    "currency",
+    "due_day",
+    "active",
+    "created_at",
+    "updated_at",
+]
+
+PAYMENT_STATUS_HEADERS = [
+    "payment_id",
+    "month",
+    "status",
+    "last_reminded_at",
+    "paid_at",
+    "snooze_until",
+    "updated_at",
+]
+
+PAYMENT_STATUS_VALUES = {"pending", "paid", "snoozed"}
 
 TYPE_LABELS = {
     "en": {"income": "Income", "expense": "Expense", "savings": "Savings"},
@@ -217,6 +247,10 @@ class FinanceSheets:
         self._setup_history_sheet(ws3, DEFAULT_SHEET_LANGUAGE)
         ws4 = self.sh.add_worksheet(self._sheet_title("settings", DEFAULT_SHEET_LANGUAGE), rows=100, cols=2)
         self._reset_settings_sheet(ws4, DEFAULT_SHEET_LANGUAGE)
+        ws5 = self.sh.add_worksheet(self._sheet_title("expected_payments", DEFAULT_SHEET_LANGUAGE), rows=200, cols=9)
+        self._setup_expected_payments_sheet(ws5)
+        ws6 = self.sh.add_worksheet(self._sheet_title("payment_status", DEFAULT_SHEET_LANGUAGE), rows=400, cols=7)
+        self._setup_payment_status_sheet(ws6)
 
     def _ensure_sheets(self):
         for sheet_key, rows, cols, setup in (
@@ -224,13 +258,24 @@ class FinanceSheets:
             ("budget", 60, 6, self._setup_budget_sheet),
             ("history", 100, 10, self._setup_history_sheet),
             ("settings", 100, 2, self._reset_settings_sheet),
+            ("expected_payments", 200, 9, self._setup_expected_payments_sheet),
+            ("payment_status", 400, 7, self._setup_payment_status_sheet),
         ):
             if not self._find_worksheet(sheet_key):
                 ws = self.sh.add_worksheet(self._sheet_title(sheet_key, self.sheet_language), rows=rows, cols=cols)
-                setup(ws, self.sheet_language)
+                try:
+                    setup(ws, self.sheet_language)
+                except TypeError:
+                    setup(ws)
 
     def _get_settings_ws(self):
         return self._worksheet("settings")
+
+    def _get_expected_payments_ws(self):
+        return self._worksheet("expected_payments")
+
+    def _get_payment_status_ws(self):
+        return self._worksheet("payment_status")
 
     def _sheet_title(self, key: str, language: str | None = None) -> str:
         lang = self._normalize_sheet_language(language)
@@ -323,6 +368,102 @@ class FinanceSheets:
         ws.update("A1:B1", [headers])
         ws.freeze(rows=1)
 
+    def _setup_expected_payments_sheet(self, ws) -> None:
+        try:
+            if ws.acell("A1").value == EXPECTED_PAYMENTS_HEADERS[0]:
+                return
+        except Exception:
+            pass
+        ws.clear()
+        ws.update("A1:I1", [EXPECTED_PAYMENTS_HEADERS])
+        ws.freeze(rows=1)
+
+    def _setup_payment_status_sheet(self, ws) -> None:
+        try:
+            if ws.acell("A1").value == PAYMENT_STATUS_HEADERS[0]:
+                return
+        except Exception:
+            pass
+        ws.clear()
+        ws.update("A1:G1", [PAYMENT_STATUS_HEADERS])
+        ws.freeze(rows=1)
+
+    def _now_iso(self) -> str:
+        return datetime.datetime.now().replace(microsecond=0).isoformat()
+
+    def current_month_key(self, today: datetime.date | None = None) -> str:
+        base = today or datetime.date.today()
+        return base.strftime("%Y-%m")
+
+    def get_due_date(self, due_day: int, month: str | None = None) -> datetime.date:
+        if month:
+            year, mon = month.split("-", 1)
+            base_year = int(year)
+            base_month = int(mon)
+        else:
+            today = datetime.date.today()
+            base_year = today.year
+            base_month = today.month
+        safe_day = max(1, min(int(due_day), monthrange(base_year, base_month)[1]))
+        return datetime.date(base_year, base_month, safe_day)
+
+    def is_expected_payment_due(self, due_day: int, today: datetime.date | None = None) -> bool:
+        due_date = self.get_due_date(due_day, self.current_month_key(today))
+        base = today or datetime.date.today()
+        delta = (due_date - base).days
+        return delta in {7, 3, 1, 0} or delta < 0
+
+    def due_timing_label(self, due_day: int, today: datetime.date | None = None) -> str:
+        due_date = self.get_due_date(due_day, self.current_month_key(today))
+        base = today or datetime.date.today()
+        delta = (due_date - base).days
+        if delta > 1:
+            return f"due in {delta} days"
+        if delta == 1:
+            return "due tomorrow"
+        if delta == 0:
+            return "due today"
+        if delta == -1:
+            return "overdue by 1 day"
+        return f"overdue by {abs(delta)} days"
+
+    def _payment_from_row(self, row: list[str]) -> dict:
+        padded = (row + [""] * len(EXPECTED_PAYMENTS_HEADERS))[: len(EXPECTED_PAYMENTS_HEADERS)]
+        return {
+            "id": str(padded[0]).strip(),
+            "name": str(padded[1]).strip(),
+            "category": self._canonical_category(padded[2]),
+            "amount": self._safe_float(padded[3]),
+            "currency": str(padded[4]).strip() or self.currency,
+            "due_day": int(self._safe_float(padded[5]) or 0),
+            "active": str(padded[6]).strip().lower() in {"true", "1", "yes"},
+            "created_at": str(padded[7]).strip(),
+            "updated_at": str(padded[8]).strip(),
+        }
+
+    def _status_from_row(self, row: list[str]) -> dict:
+        padded = (row + [""] * len(PAYMENT_STATUS_HEADERS))[: len(PAYMENT_STATUS_HEADERS)]
+        status = str(padded[2]).strip().lower() or "pending"
+        if status not in PAYMENT_STATUS_VALUES:
+            status = "pending"
+        return {
+            "payment_id": str(padded[0]).strip(),
+            "month": str(padded[1]).strip(),
+            "status": status,
+            "last_reminded_at": str(padded[3]).strip(),
+            "paid_at": str(padded[4]).strip(),
+            "snooze_until": str(padded[5]).strip(),
+            "updated_at": str(padded[6]).strip(),
+        }
+
+    def _safe_float(self, value) -> float:
+        try:
+            if value is None:
+                return 0.0
+            return float(str(value).replace(" ", "").replace(",", ".") or 0)
+        except Exception:
+            return 0.0
+
     def get_setting(self, key: str, default: str = "") -> str:
         ws = self._get_settings_ws()
         rows = ws.get_all_values()
@@ -341,6 +482,215 @@ class FinanceSheets:
         ws.append_row([key, str(value)], value_input_option="USER_ENTERED")
         return {"success": True, "key": key, "value": value}
 
+    def list_expected_payments(self, active_only: bool = False) -> list[dict]:
+        ws = self._get_expected_payments_ws()
+        rows = ws.get_all_values()[1:]
+        payments = [self._payment_from_row(row) for row in rows if row and any(str(cell).strip() for cell in row)]
+        payments = [payment for payment in payments if payment["id"]]
+        if active_only:
+            payments = [payment for payment in payments if payment["active"]]
+        payments.sort(key=lambda payment: (not payment["active"], payment["due_day"], payment["name"].lower()))
+        return payments
+
+    def get_expected_payment(self, payment_id: str) -> dict | None:
+        for payment in self.list_expected_payments(active_only=False):
+            if payment["id"] == payment_id:
+                return payment
+        return None
+
+    def create_expected_payment(self, name: str, category: str, amount: float, due_day: int, currency: str | None = None) -> dict:
+        ws = self._get_expected_payments_ws()
+        now_iso = self._now_iso()
+        payment = {
+            "id": uuid.uuid4().hex[:12],
+            "name": str(name).strip(),
+            "category": self._canonical_category(category),
+            "amount": round(float(amount), 2),
+            "currency": str(currency or self.currency).strip() or self.currency,
+            "due_day": max(1, min(int(due_day), 31)),
+            "active": True,
+            "created_at": now_iso,
+            "updated_at": now_iso,
+        }
+        ws.append_row(
+            [
+                payment["id"],
+                payment["name"],
+                self._display_category(payment["category"], "en"),
+                payment["amount"],
+                payment["currency"],
+                payment["due_day"],
+                "TRUE",
+                payment["created_at"],
+                payment["updated_at"],
+            ],
+            value_input_option="USER_ENTERED",
+        )
+        return payment
+
+    def update_expected_payment(self, payment_id: str, **fields) -> dict | None:
+        ws = self._get_expected_payments_ws()
+        rows = ws.get_all_values()
+        for i, row in enumerate(rows[1:], start=2):
+            payment = self._payment_from_row(row)
+            if payment["id"] != payment_id:
+                continue
+
+            payment["name"] = str(fields.get("name", payment["name"])).strip()
+            if "category" in fields:
+                payment["category"] = self._canonical_category(fields["category"])
+            if "amount" in fields:
+                payment["amount"] = round(float(fields["amount"]), 2)
+            if "currency" in fields:
+                payment["currency"] = str(fields["currency"]).strip() or payment["currency"]
+            if "due_day" in fields:
+                payment["due_day"] = max(1, min(int(fields["due_day"]), 31))
+            if "active" in fields:
+                payment["active"] = bool(fields["active"])
+            payment["updated_at"] = self._now_iso()
+
+            ws.update(
+                f"A{i}:I{i}",
+                [[
+                    payment["id"],
+                    payment["name"],
+                    self._display_category(payment["category"], "en"),
+                    payment["amount"],
+                    payment["currency"],
+                    payment["due_day"],
+                    "TRUE" if payment["active"] else "FALSE",
+                    payment["created_at"],
+                    payment["updated_at"],
+                ]],
+            )
+            return payment
+        return None
+
+    def delete_expected_payment(self, payment_id: str) -> bool:
+        ws = self._get_expected_payments_ws()
+        rows = ws.get_all_values()
+        deleted = False
+        for i, row in enumerate(rows[1:], start=2):
+            payment = self._payment_from_row(row)
+            if payment["id"] == payment_id:
+                ws.delete_rows(i)
+                deleted = True
+                break
+        if deleted:
+            status_ws = self._get_payment_status_ws()
+            status_rows = status_ws.get_all_values()
+            for i in range(len(status_rows) - 1, 0, -1):
+                row = status_rows[i]
+                if row and str(row[0]).strip() == payment_id:
+                    status_ws.delete_rows(i + 1)
+        return deleted
+
+    def get_payment_status(self, payment_id: str, month: str) -> dict:
+        ws = self._get_payment_status_ws()
+        rows = ws.get_all_values()[1:]
+        for row in rows:
+            status = self._status_from_row(row)
+            if status["payment_id"] == payment_id and status["month"] == month:
+                return status
+        return {
+            "payment_id": payment_id,
+            "month": month,
+            "status": "pending",
+            "last_reminded_at": "",
+            "paid_at": "",
+            "snooze_until": "",
+            "updated_at": "",
+        }
+
+    def upsert_payment_status(
+        self,
+        payment_id: str,
+        month: str,
+        *,
+        status: str | None = None,
+        last_reminded_at: str | None = None,
+        paid_at: str | None = None,
+        snooze_until: str | None = None,
+    ) -> dict:
+        ws = self._get_payment_status_ws()
+        rows = ws.get_all_values()
+        now_iso = self._now_iso()
+        updated_status = None
+
+        for i, row in enumerate(rows[1:], start=2):
+            current = self._status_from_row(row)
+            if current["payment_id"] != payment_id or current["month"] != month:
+                continue
+            if status is not None:
+                current["status"] = status if status in PAYMENT_STATUS_VALUES else "pending"
+            if last_reminded_at is not None:
+                current["last_reminded_at"] = last_reminded_at
+            if paid_at is not None:
+                current["paid_at"] = paid_at
+            if snooze_until is not None:
+                current["snooze_until"] = snooze_until
+            current["updated_at"] = now_iso
+            ws.update(
+                f"A{i}:G{i}",
+                [[
+                    current["payment_id"],
+                    current["month"],
+                    current["status"],
+                    current["last_reminded_at"],
+                    current["paid_at"],
+                    current["snooze_until"],
+                    current["updated_at"],
+                ]],
+            )
+            updated_status = current
+            break
+
+        if updated_status is None:
+            updated_status = {
+                "payment_id": payment_id,
+                "month": month,
+                "status": status if status in PAYMENT_STATUS_VALUES else "pending",
+                "last_reminded_at": last_reminded_at or "",
+                "paid_at": paid_at or "",
+                "snooze_until": snooze_until or "",
+                "updated_at": now_iso,
+            }
+            ws.append_row(
+                [
+                    updated_status["payment_id"],
+                    updated_status["month"],
+                    updated_status["status"],
+                    updated_status["last_reminded_at"],
+                    updated_status["paid_at"],
+                    updated_status["snooze_until"],
+                    updated_status["updated_at"],
+                ],
+                value_input_option="USER_ENTERED",
+            )
+
+        return updated_status
+
+    def mark_payment_paid(self, payment_id: str, month: str) -> dict:
+        return self.upsert_payment_status(
+            payment_id,
+            month,
+            status="paid",
+            paid_at=self._now_iso(),
+            snooze_until="",
+        )
+
+    def snooze_payment(self, payment_id: str, month: str, days: int = 1) -> dict:
+        snooze_date = (datetime.date.today() + datetime.timedelta(days=days)).isoformat()
+        return self.upsert_payment_status(payment_id, month, status="snoozed", snooze_until=snooze_date)
+
+    def record_payment_reminder(self, payment_id: str, month: str) -> dict:
+        return self.upsert_payment_status(
+            payment_id,
+            month,
+            status="pending",
+            last_reminded_at=datetime.date.today().isoformat(),
+        )
+
     def localize_spreadsheet(self, language: str) -> None:
         language = self._normalize_sheet_language(language)
         if not self.sh:
@@ -350,6 +700,8 @@ class FinanceSheets:
         budget_ws = self._worksheet("budget")
         history_ws = self._worksheet("history")
         settings_ws = self._worksheet("settings")
+        payments_ws = self._worksheet("expected_payments")
+        payment_status_ws = self._worksheet("payment_status")
 
         self._localize_transactions_sheet(tx_ws, language)
         self._localize_budget_sheet(budget_ws, language)
@@ -460,10 +812,16 @@ class FinanceSheets:
         self._setup_history_sheet(history_ws, DEFAULT_SHEET_LANGUAGE)
 
         self._reset_settings_sheet(settings_ws, DEFAULT_SHEET_LANGUAGE)
+        payments_ws.clear()
+        self._setup_expected_payments_sheet(payments_ws)
+        payment_status_ws.clear()
+        self._setup_payment_status_sheet(payment_status_ws)
         tx_ws.update_title(self._sheet_title("transactions", DEFAULT_SHEET_LANGUAGE))
         budget_ws.update_title(self._sheet_title("budget", DEFAULT_SHEET_LANGUAGE))
         history_ws.update_title(self._sheet_title("history", DEFAULT_SHEET_LANGUAGE))
         settings_ws.update_title(self._sheet_title("settings", DEFAULT_SHEET_LANGUAGE))
+        payments_ws.update_title(self._sheet_title("expected_payments", DEFAULT_SHEET_LANGUAGE))
+        payment_status_ws.update_title(self._sheet_title("payment_status", DEFAULT_SHEET_LANGUAGE))
         self.sheet_language = DEFAULT_SHEET_LANGUAGE
 
         return {"success": True, "spreadsheet_url": self.get_spreadsheet_url()}

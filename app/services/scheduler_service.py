@@ -4,6 +4,8 @@ import logging
 
 from telegram.ext import ContextTypes
 
+from app.bot.handlers.callbacks import build_payment_reminder_text
+from app.bot.keyboards import reminder_keyboard
 from app.utils.markdown import md_to_html
 
 log = logging.getLogger(__name__)
@@ -76,6 +78,40 @@ async def monthly_onboarding(context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=uid, text=text, parse_mode="HTML")
 
 
+async def expected_payment_reminders(context: ContextTypes.DEFAULT_TYPE):
+    sheets = context.job.data["sheets"]
+    config = context.job.data["config"]
+    today = datetime.date.today()
+    month = sheets.current_month_key(today)
+    payments = sheets.list_expected_payments(active_only=True)
+    uids = config.ALLOWED_USERS if config.ALLOWED_USERS else []
+
+    for payment in payments:
+        if not sheets.is_expected_payment_due(payment["due_day"], today):
+            continue
+
+        status = sheets.get_payment_status(payment["id"], month)
+        if status["status"] == "paid":
+            continue
+
+        if status["last_reminded_at"] == today.isoformat():
+            continue
+
+        snooze_until = status.get("snooze_until", "")
+        if snooze_until:
+            try:
+                if datetime.date.fromisoformat(snooze_until) > today:
+                    continue
+            except ValueError:
+                pass
+
+        text = md_to_html(build_payment_reminder_text(payment, month))
+        markup = reminder_keyboard(payment["id"], month)
+        for uid in uids:
+            await context.bot.send_message(chat_id=uid, text=text, parse_mode="HTML", reply_markup=markup)
+        sheets.record_payment_reminder(payment["id"], month)
+
+
 def register_jobs(job_queue, config, dp_bot, sheets_instance, agent_instance):
     import datetime
     import pytz
@@ -88,6 +124,13 @@ def register_jobs(job_queue, config, dp_bot, sheets_instance, agent_instance):
         name="daily_summary"
     )
     
+    job_queue.run_daily(
+        expected_payment_reminders,
+        time=datetime.time(hour=9, minute=0, tzinfo=tz),
+        data={'config': config, 'sheets': sheets_instance},
+        name="expected_payment_reminders"
+    )
+
     job_queue.run_daily(
         weekly_summary,
         time=datetime.time(hour=19, minute=0, tzinfo=tz),
