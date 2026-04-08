@@ -14,7 +14,7 @@ from telegram.ext import (
 
 from app.ai.agent import FinanceAgent
 from app.bot.handlers.callbacks import handle_callback
-from app.bot.handlers.commands import cmd_clear, cmd_help, cmd_payments, cmd_settings, cmd_sheet, handle_message
+from app.bot.handlers.commands import cmd_clear, cmd_export, cmd_help, cmd_payments, cmd_settings, cmd_sheet, handle_message
 from app.bot.handlers.onboarding import build_onboarding_handler
 from app.bot.media import handle_document, handle_photo, handle_voice
 from app.bot.state import log, runtime_state, set_agent, sheets
@@ -61,6 +61,7 @@ def build_application() -> Application:
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("sheet", cmd_sheet))
     app.add_handler(CommandHandler("table", cmd_sheet))
+    app.add_handler(CommandHandler("export", cmd_export))
     app.add_handler(CommandHandler("settings", cmd_settings))
     app.add_handler(CommandHandler("payments", cmd_payments))
     app.add_handler(CommandHandler("clear", cmd_clear))

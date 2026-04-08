@@ -1383,6 +1383,14 @@ class FinanceSheets:
             "has_plan": bool(plan),
         }
 
+    def list_transactions(self, month: str | None = None) -> list[dict]:
+        tx_ws = self._worksheet("transactions")
+        records = [self._normalize_tx_record(r) for r in tx_ws.get_all_records()]
+        if month:
+            month_key = str(month).strip()
+            records = [r for r in records if str(r.get("month", "")).strip() == month_key]
+        return records
+
     def get_spreadsheet_url(self) -> str:
         if self.sh:
             return f"https://docs.google.com/spreadsheets/d/{self.sh.id}"

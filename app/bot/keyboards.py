@@ -114,3 +114,30 @@ def clear_confirmation_keyboard(user_id: int) -> InlineKeyboardMarkup:
             ],
         ]
     )
+
+
+def export_period_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("all", callback_data="export:all"),
+                InlineKeyboardButton("day", callback_data="export:day"),
+            ],
+            [
+                InlineKeyboardButton("week", callback_data="export:week"),
+                InlineKeyboardButton("month", callback_data="export:month"),
+            ],
+            [
+                InlineKeyboardButton("Year", callback_data="export:year"),
+            ],
+            [
+                InlineKeyboardButton("Q1", callback_data="export:q1"),
+                InlineKeyboardButton("Q2", callback_data="export:q2"),
+                InlineKeyboardButton("Q3", callback_data="export:q3"),
+                InlineKeyboardButton("Q4", callback_data="export:q4"),
+            ],
+            [
+                InlineKeyboardButton("Custom", callback_data="export:custom"),
+            ],
+        ]
+    )

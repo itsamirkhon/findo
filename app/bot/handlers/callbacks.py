@@ -6,14 +6,17 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from app.bot.handlers.commands import (
+    build_export_payload_for_action,
     help_text,
+    parse_custom_export_range,
     payment_detail_text,
     payments_list_keyboard,
     payments_manager_text,
+    send_export_csv,
     settings_summary_text,
 )
 from app.bot.handlers.onboarding import begin_forced_onboarding
-from app.bot.keyboards import category_keyboard, payment_item_keyboard, reminder_keyboard, settings_keyboard
+from app.bot.keyboards import category_keyboard, export_period_keyboard, payment_item_keyboard, reminder_keyboard, settings_keyboard
 from app.bot.state import (
     allowed,
     get_agent,
@@ -43,6 +46,10 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> Non
 
     if data.startswith("payments:") or data.startswith("payment:"):
         await _handle_payments_callback(query, ctx)
+        return
+
+    if data.startswith("export:"):
+        await _handle_export_callback(query, ctx)
         return
 
     if data == "info:open":
@@ -311,6 +318,37 @@ async def _handle_payments_callback(query, ctx: ContextTypes.DEFAULT_TYPE) -> No
             f"⏰ Snoozed until `{status['snooze_until']}` for *{payment['name']}*",
             parse_mode="Markdown",
         )
+
+
+async def _handle_export_callback(query, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    data = query.data or ""
+    action = data.split(":", 1)[1] if ":" in data else ""
+
+    if action == "open":
+        ctx.user_data.pop("export_pending_action", None)
+        await query.message.reply_text(
+            "📤 Choose export period:",
+            reply_markup=export_period_keyboard(),
+        )
+        return
+
+    if action == "custom":
+        ctx.user_data["export_pending_action"] = "custom_range"
+        await query.message.reply_text(
+            "🗓 Send custom range with two dates:\n"
+            "`2026-04-01 2026-04-30` or `01.04.2026 30.04.2026`\n"
+            "Send `cancel` to abort.",
+            parse_mode="Markdown",
+        )
+        return
+
+    payload = build_export_payload_for_action(action)
+    if payload is None:
+        await query.message.reply_text("❌ Unknown export option.")
+        return
+
+    records, label, suffix = payload
+    await send_export_csv(query.message, records, label, suffix)
 
 
 def build_payment_reminder_text(payment: dict, month: str) -> str:

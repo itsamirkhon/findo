@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import csv
+import datetime
+import io
+
 import pytz
+from telegram import InputFile
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -8,6 +13,7 @@ from app.bot.handlers.onboarding import continue_forced_onboarding
 from app.bot.keyboards import (
     category_keyboard,
     clear_confirmation_keyboard,
+    export_period_keyboard,
     payment_item_keyboard,
     payments_manager_keyboard,
     settings_keyboard,
@@ -16,6 +22,8 @@ from app.bot.state import allowed, apply_runtime_setting, histories, sheets
 from app.bot.streaming import reply_agent_stream
 from app.services.sheets_service import CATEGORY_LABELS, GREEN_ZONE_CATEGORIES, RED_ZONE_CATEGORIES, YELLOW_ZONE_CATEGORIES
 
+EXPORT_HEADERS = ["date", "type", "amount", "category", "description", "currency", "week", "month", "quarter", "half_year", "year", "added_at"]
+
 
 def help_text() -> str:
     return (
@@ -23,6 +31,7 @@ def help_text() -> str:
         "/start   — main menu\n"
         "/sheet   — Google Sheets link\n"
         "/table   — Google Sheets link\n"
+        "/export  — export transactions CSV\n"
         "/settings — bot settings\n"
         "/payments — expected payments manager\n"
         "/clear   — full reset with confirmation\n"
@@ -59,6 +68,145 @@ async def cmd_sheet(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         return
     text = f"📁 Your spreadsheet:\n{sheets.get_spreadsheet_url()}"
     await update.message.reply_text(text)
+
+
+def _parse_tx_date(raw: str) -> datetime.date | None:
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    try:
+        return datetime.datetime.strptime(text, "%d.%m.%Y").date()
+    except ValueError:
+        return None
+
+
+def _records_between(start: datetime.date, end: datetime.date) -> list[dict]:
+    records = sheets.list_transactions(month=None)
+    result: list[dict] = []
+    for item in records:
+        tx_date = _parse_tx_date(item.get("date", ""))
+        if tx_date is None:
+            continue
+        if start <= tx_date <= end:
+            result.append(item)
+    return result
+
+
+def build_export_payload_for_action(action: str) -> tuple[list[dict], str, str] | None:
+    today = datetime.date.today()
+    key = (action or "").strip().lower()
+
+    if key == "all":
+        return sheets.list_transactions(month=None), "all time", "all"
+
+    if key == "day":
+        records = _records_between(today, today)
+        suffix = today.strftime("%Y%m%d")
+        return records, f"day {today.isoformat()}", f"day_{suffix}"
+
+    if key == "week":
+        week_start = today - datetime.timedelta(days=today.weekday())
+        week_end = week_start + datetime.timedelta(days=6)
+        records = _records_between(week_start, week_end)
+        suffix = f"{week_start.strftime('%Y%m%d')}_{week_end.strftime('%Y%m%d')}"
+        return records, f"week {week_start.isoformat()}..{week_end.isoformat()}", f"week_{suffix}"
+
+    if key == "month":
+        month_key = today.strftime("%Y-%m")
+        records = sheets.list_transactions(month=month_key)
+        return records, f"month {month_key}", month_key
+
+    if key == "year":
+        year_start = datetime.date(today.year, 1, 1)
+        year_end = datetime.date(today.year, 12, 31)
+        records = _records_between(year_start, year_end)
+        return records, f"year {today.year}", f"year_{today.year}"
+
+    quarter_map = {"q1": (1, 3), "q2": (4, 6), "q3": (7, 9), "q4": (10, 12)}
+    if key in quarter_map:
+        start_month, end_month = quarter_map[key]
+        quarter_start = datetime.date(today.year, start_month, 1)
+        if end_month == 12:
+            quarter_end = datetime.date(today.year, 12, 31)
+        else:
+            quarter_end = datetime.date(today.year, end_month + 1, 1) - datetime.timedelta(days=1)
+        records = _records_between(quarter_start, quarter_end)
+        return records, f"{key.upper()} {today.year}", f"{key}_{today.year}"
+
+    return None
+
+
+def parse_custom_export_range(text: str) -> tuple[datetime.date, datetime.date] | None:
+    raw = (text or "").strip()
+    if not raw:
+        return None
+
+    normalized = raw.replace("..", " ").replace(",", " ")
+    normalized = normalized.replace("—", " ").replace(" to ", " ")
+    parts = [p for p in normalized.split() if p]
+    if len(parts) != 2:
+        return None
+
+    def _parse(token: str) -> datetime.date | None:
+        for fmt in ("%Y-%m-%d", "%d.%m.%Y"):
+            try:
+                return datetime.datetime.strptime(token, fmt).date()
+            except ValueError:
+                continue
+        return None
+
+    start = _parse(parts[0])
+    end = _parse(parts[1])
+    if not start or not end:
+        return None
+    if start > end:
+        start, end = end, start
+    return start, end
+
+
+async def send_export_csv(message, records: list[dict], label: str, suffix: str) -> None:
+    if not records:
+        await message.reply_text("ℹ️ No transactions found for export.")
+        return
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(EXPORT_HEADERS)
+    for item in records:
+        raw_category = str(item.get("category", "")).strip()
+        canonical_category = sheets._canonical_category(raw_category)
+        category_en = CATEGORY_LABELS["en"].get(canonical_category, raw_category)
+        writer.writerow([
+            item.get("date", ""),
+            item.get("type", ""),
+            item.get("amount", ""),
+            category_en,
+            item.get("description", ""),
+            item.get("currency", ""),
+            item.get("week", ""),
+            item.get("month", ""),
+            item.get("quarter", ""),
+            item.get("half_year", ""),
+            item.get("year", ""),
+            item.get("added_at", ""),
+        ])
+
+    csv_bytes = buffer.getvalue().encode("utf-8")
+    filename = f"transactions_{suffix}.csv"
+    await message.reply_document(
+        document=InputFile(io.BytesIO(csv_bytes), filename=filename),
+        caption=f"📤 Export generated for {label}. Rows: {len(records)}",
+    )
+
+
+async def cmd_export(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if not allowed(update.effective_user.id):
+        return
+    ctx.user_data.pop("export_pending_action", None)
+    await update.message.reply_text(
+        "📤 Choose export period:",
+        reply_markup=export_period_keyboard(),
+    )
 
 
 async def cmd_clear(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -280,6 +428,31 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None
         except Exception as exc:
             await update.message.reply_text(f"❌ {exc}")
             return
+
+    if ctx.user_data.get("export_pending_action") == "custom_range":
+        value = (update.message.text or "").strip()
+        if not value:
+            await update.message.reply_text("❌ Empty value. Send start and end dates.")
+            return
+        if value.lower() in {"cancel", "/cancel"}:
+            ctx.user_data.pop("export_pending_action", None)
+            await update.message.reply_text("✅ Custom export cancelled.")
+            return
+
+        date_range = parse_custom_export_range(value)
+        if not date_range:
+            await update.message.reply_text(
+                "❌ Invalid format. Send two dates, e.g. `2026-04-01 2026-04-30` or `01.04.2026 30.04.2026`.",
+                parse_mode="Markdown",
+            )
+            return
+
+        start, end = date_range
+        records = _records_between(start, end)
+        ctx.user_data.pop("export_pending_action", None)
+        suffix = f"custom_{start.strftime('%Y%m%d')}_{end.strftime('%Y%m%d')}"
+        await send_export_csv(update.message, records, f"custom {start.isoformat()}..{end.isoformat()}", suffix)
+        return
 
     await ctx.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     await reply_agent_stream(update, update.message.text)
