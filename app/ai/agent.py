@@ -16,6 +16,7 @@ from app.services.sheets_service import (
     RED_ZONE_CATEGORIES,
     YELLOW_ZONE_CATEGORIES,
 )
+import app.services.charts_service as charts_service
 
 # Tools that mutate data — must not be executed more than once per user message
 WRITE_TOOLS = {
@@ -25,6 +26,8 @@ WRITE_TOOLS = {
     "set_plan",
     "delete_transaction",
     "edit_transaction",
+    "add_expected_payment",
+    "delete_expected_payment",
 }
 
 EXPENSE_CATEGORY_ENUM = [CATEGORY_LABELS["en"][category] for category in (RED_ZONE_CATEGORIES + YELLOW_ZONE_CATEGORIES + GREEN_ZONE_CATEGORIES)]
@@ -174,6 +177,85 @@ TOOLS = [
                     "trans_date":  {"type": "string",  "description": "New date in DD.MM.YYYY format (optional)"}
                 },
                 "required": ["row_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_expected_payment",
+            "description": "Add a new expected/recurring payment (subscription, bill, etc.)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name":     {"type": "string", "description": "Name of the subscription or bill (e.g. Netflix, Rent)"},
+                    "category": {"type": "string", "enum": EXPENSE_CATEGORY_ENUM + INCOME_CATEGORY_ENUM},
+                    "amount":   {"type": "number", "description": "Amount"},
+                    "due_day":  {"type": "integer", "description": "Day of the month it is due (1-31)"}
+                },
+                "required": ["name", "category", "amount", "due_day"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_expected_payments",
+            "description": "List all expected payments (subscriptions, bills). Call this to see the list or to get payment IDs.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "active_only": {"type": "boolean", "description": "If true, only returns active payments. Default is false."}
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_expected_payment",
+            "description": "Delete an expected payment (subscription/bill) by its ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "payment_id": {"type": "string", "description": "The ID of the expected payment to delete (obtain via get_expected_payments)"}
+                },
+                "required": ["payment_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_history_stats",
+            "description": "List aggregated historical statistics (income, expenses by month). Call this to get data before drawing a timeline chart."
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "render_custom_chart",
+            "description": "Generate a customized chart based on data you fetched. Returns a markdown image tag that you MUST include directly in your text response.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Chart title"},
+                    "chart_type": {"type": "string", "enum": ["bar", "line", "pie"]},
+                    "labels": {"type": "array", "items": {"type": "string"}, "description": "X-axis labels or Pie slices"},
+                    "datasets": {
+                        "type": "array", 
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "label": {"type": "string", "description": "Name of the dataset (e.g. Income)"},
+                                "data": {"type": "array", "items": {"type": "number"}, "description": "Values matching the labels"},
+                                "color": {"type": "string", "description": "Hex color code, e.g. #1dd1a1 or #ff6b6b (optional)"}
+                            },
+                            "required": ["label", "data"]
+                        }
+                    }
+                },
+                "required": ["title", "chart_type", "labels", "datasets"]
             }
         }
     }
@@ -336,6 +418,27 @@ class FinanceAgent:
                         description=args.get("description"),
                         trans_date=args.get("trans_date")
                     )
+                case "add_expected_payment":
+                    return self.sheets.create_expected_payment(
+                        name=args["name"],
+                        category=args["category"],
+                        amount=args["amount"],
+                        due_day=args["due_day"]
+                    )
+                case "get_expected_payments":
+                    return {"expected_payments": self.sheets.list_expected_payments(active_only=args.get("active_only", False))}
+                case "delete_expected_payment":
+                    success = self.sheets.delete_expected_payment(payment_id=args["payment_id"])
+                    return {"success": success, "deleted_id": args["payment_id"]}
+                case "get_history_stats":
+                    return {"history": self.sheets.get_history_records()}
+                case "render_custom_chart":
+                    title = args.get("title", "Chart")
+                    chart_type = args.get("chart_type", "bar")
+                    labels = args.get("labels", [])
+                    datasets = args.get("datasets", [])
+                    path = charts_service.generate_custom_chart(title, chart_type, labels, datasets)
+                    return {"chart_path": path, "instruction": f"Success. You MUST embed this exactly in your text: ![Chart]({path})"}
                 case _:
                     return {"error": f"Unknown tool: {name}"}
         except Exception as e:

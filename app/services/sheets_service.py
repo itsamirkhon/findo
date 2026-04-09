@@ -1383,6 +1383,10 @@ class FinanceSheets:
             "has_plan": bool(plan),
         }
 
+    def get_history_records(self) -> list[dict]:
+        ws = self._worksheet("history")
+        return [self._normalize_history_record(r) for r in ws.get_all_records()]
+
     def list_transactions(self, month: str | None = None) -> list[dict]:
         tx_ws = self._worksheet("transactions")
         records = [self._normalize_tx_record(r) for r in tx_ws.get_all_records()]

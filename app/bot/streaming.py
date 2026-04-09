@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import re
 import time
 
 from telegram import Update
@@ -32,16 +34,35 @@ async def stream_text_reply(message, stream, *, empty_text: str, error_text: str
         log.exception("Streaming response error: %s", exc)
         full_text = error_text
 
+    images = []
+    clean_text = full_text
+    
+    # Extract Markdown image tags with /tmp/ path
+    for match in re.finditer(r'!\[.*?\]\((/tmp/.*?\.png)\)', full_text):
+        path = match.group(1)
+        if os.path.exists(path):
+            images.append(path)
+            
+    # Clean the text
+    clean_text = re.sub(r'!\[.*?\]\((/tmp/.*?\.png)\)', '', clean_text).strip()
+
     try:
         await placeholder.edit_text(
-            md_to_html(full_text) if full_text else empty_text,
+            md_to_html(clean_text) if clean_text else empty_text,
             parse_mode="HTML",
             disable_web_page_preview=True,
         )
     except Exception:
         pass
+        
+    for path in set(images):
+        try:
+            with open(path, 'rb') as f:
+                await placeholder.reply_photo(photo=f)
+        except Exception as e:
+            log.exception("Failed to send chart photo: %s", e)
 
-    return full_text
+    return clean_text
 
 
 async def reply_agent_stream(update: Update, text: str) -> None:
