@@ -1,4 +1,5 @@
 """Google Sheets integration for finance tracking — 3-zone budget system."""
+
 from __future__ import annotations
 
 import datetime
@@ -20,7 +21,13 @@ SCOPES = [
 
 # 🔴 Красная зона — обязательные платежи
 RED_ZONE_CATEGORIES = [
-    "Аренда", "Обучение", "Подписки", "Связь", "Здоровье", "Помощь семье", "Садака"
+    "Аренда",
+    "Обучение",
+    "Подписки",
+    "Связь",
+    "Здоровье",
+    "Помощь семье",
+    "Садака",
 ]
 
 # 🟡 Жёлтая зона — рестораны, досуг, гулянки, питание
@@ -47,6 +54,7 @@ SHEET_TITLES = {
         "settings": "Settings",
         "expected_payments": "Expected Payments",
         "payment_status": "Payment Status",
+        "savings_goals": "Savings Goals",
     },
     "ru": {
         "transactions": "Транзакции",
@@ -55,12 +63,39 @@ SHEET_TITLES = {
         "settings": "Настройки",
         "expected_payments": "Expected Payments",
         "payment_status": "Payment Status",
+        "savings_goals": "Savings Goals",
     },
 }
 
 TX_HEADERS = {
-    "en": ["Date", "Type", "Amount", "Category", "Description", "Currency", "Week", "Month", "Quarter", "Half-Year", "Year", "Added At"],
-    "ru": ["Дата", "Тип", "Сумма", "Категория", "Описание", "Валюта", "Неделя", "Месяц", "Квартал", "Полугодие", "Год", "Добавлено"],
+    "en": [
+        "Date",
+        "Type",
+        "Amount",
+        "Category",
+        "Description",
+        "Currency",
+        "Week",
+        "Month",
+        "Quarter",
+        "Half-Year",
+        "Year",
+        "Added At",
+    ],
+    "ru": [
+        "Дата",
+        "Тип",
+        "Сумма",
+        "Категория",
+        "Описание",
+        "Валюта",
+        "Неделя",
+        "Месяц",
+        "Квартал",
+        "Полугодие",
+        "Год",
+        "Добавлено",
+    ],
 }
 TX_HEADER_ALIASES = {
     "date": {"Date", "Дата"},
@@ -78,8 +113,26 @@ TX_HEADER_ALIASES = {
 }
 
 HISTORY_HEADERS = {
-    "en": ["Month", "Income", "Obligatory", "Fun", "One-Time", "Savings", "Total Expenses", "Balance"],
-    "ru": ["Месяц", "Доходы", "Обязательное", "Гулянки", "Разовые", "Копилка", "Всего расходов", "Баланс"],
+    "en": [
+        "Month",
+        "Income",
+        "Obligatory",
+        "Fun",
+        "One-Time",
+        "Savings",
+        "Total Expenses",
+        "Balance",
+    ],
+    "ru": [
+        "Месяц",
+        "Доходы",
+        "Обязательное",
+        "Гулянки",
+        "Разовые",
+        "Копилка",
+        "Всего расходов",
+        "Баланс",
+    ],
 }
 HISTORY_HEADER_ALIASES = {
     "month": {"Month", "Месяц"},
@@ -181,7 +234,14 @@ BUDGET_TEXT = {
         "project_note": "auto: 10% of expenses",
     },
     "ru": {
-        "header": ["Категория", "Лимит", "Факт (авто)", "Остаток", "Зона", "Примечание"],
+        "header": [
+            "Категория",
+            "Лимит",
+            "Факт (авто)",
+            "Остаток",
+            "Зона",
+            "Примечание",
+        ],
         "red_header": "🔴 КРАСНАЯ ЗОНА — Обязательное",
         "yellow_header": "🟡 ЖЁЛТАЯ ЗОНА — Досуг, питание, гулянки",
         "green_header": "🟢 ЗЕЛЁНАЯ ЗОНА — Разовые расходы",
@@ -197,7 +257,9 @@ BUDGET_TEXT = {
 
 
 class FinanceSheets:
-    def __init__(self, credentials_file: str, spreadsheet_name: str, currency: str = "EUR"):
+    def __init__(
+        self, credentials_file: str, spreadsheet_name: str, currency: str = "EUR"
+    ):
         self.credentials_file = credentials_file
         self.spreadsheet_name = spreadsheet_name
         self.currency = currency
@@ -210,6 +272,7 @@ class FinanceSheets:
 
     def connect(self):
         import os, json
+
         def parse_service_account_json(raw: str | None) -> dict | None:
             if not raw:
                 return None
@@ -237,8 +300,10 @@ class FinanceSheets:
         if info is not None:
             self.creds = Credentials.from_service_account_info(info, scopes=SCOPES)
         else:
-            self.creds = Credentials.from_service_account_file(creds_file_value, scopes=SCOPES)
-        
+            self.creds = Credentials.from_service_account_file(
+                creds_file_value, scopes=SCOPES
+            )
+
         self.gc = gspread.authorize(self.creds)
         try:
             self.sh = self.gc.open(self.spreadsheet_name)
@@ -252,17 +317,33 @@ class FinanceSheets:
         ws = self.sh.get_worksheet(0)
         ws.update_title(self._sheet_title("transactions", DEFAULT_SHEET_LANGUAGE))
         self._setup_tx_sheet(ws, DEFAULT_SHEET_LANGUAGE)
-        ws2 = self.sh.add_worksheet(self._sheet_title("budget", DEFAULT_SHEET_LANGUAGE), rows=60, cols=6)
+        ws2 = self.sh.add_worksheet(
+            self._sheet_title("budget", DEFAULT_SHEET_LANGUAGE), rows=60, cols=6
+        )
         self._setup_budget_sheet(ws2, DEFAULT_SHEET_LANGUAGE)
-        ws3 = self.sh.add_worksheet(self._sheet_title("history", DEFAULT_SHEET_LANGUAGE), rows=100, cols=10)
+        ws3 = self.sh.add_worksheet(
+            self._sheet_title("history", DEFAULT_SHEET_LANGUAGE), rows=100, cols=10
+        )
         self._setup_history_sheet(ws3, DEFAULT_SHEET_LANGUAGE)
-        ws4 = self.sh.add_worksheet(self._sheet_title("settings", DEFAULT_SHEET_LANGUAGE), rows=100, cols=2)
+        ws4 = self.sh.add_worksheet(
+            self._sheet_title("settings", DEFAULT_SHEET_LANGUAGE), rows=100, cols=2
+        )
         self._reset_settings_sheet(ws4, DEFAULT_SHEET_LANGUAGE)
-        ws5 = self.sh.add_worksheet(self._sheet_title("expected_payments", DEFAULT_SHEET_LANGUAGE), rows=200, cols=9)
+        ws5 = self.sh.add_worksheet(
+            self._sheet_title("expected_payments", DEFAULT_SHEET_LANGUAGE),
+            rows=200,
+            cols=9,
+        )
         self._setup_expected_payments_sheet(ws5)
-        ws6 = self.sh.add_worksheet(self._sheet_title("payment_status", DEFAULT_SHEET_LANGUAGE), rows=400, cols=7)
+        ws6 = self.sh.add_worksheet(
+            self._sheet_title("payment_status", DEFAULT_SHEET_LANGUAGE),
+            rows=400,
+            cols=7,
+        )
         self._setup_payment_status_sheet(ws6)
-        ws7 = self.sh.add_worksheet(self._sheet_title("savings_goals", DEFAULT_SHEET_LANGUAGE), rows=100, cols=8)
+        ws7 = self.sh.add_worksheet(
+            self._sheet_title("savings_goals", DEFAULT_SHEET_LANGUAGE), rows=100, cols=8
+        )
         self._setup_savings_goals_sheet(ws7)
 
     def _ensure_sheets(self):
@@ -276,7 +357,11 @@ class FinanceSheets:
             ("savings_goals", 100, 8, self._setup_savings_goals_sheet),
         ):
             if not self._find_worksheet(sheet_key):
-                ws = self.sh.add_worksheet(self._sheet_title(sheet_key, self.sheet_language), rows=rows, cols=cols)
+                ws = self.sh.add_worksheet(
+                    self._sheet_title(sheet_key, self.sheet_language),
+                    rows=rows,
+                    cols=cols,
+                )
                 try:
                     setup(ws, self.sheet_language)
                 except TypeError:
@@ -296,7 +381,9 @@ class FinanceSheets:
         return SHEET_TITLES[lang][key]
 
     def _normalize_sheet_language(self, language: str | None) -> str:
-        normalized = (language or self.sheet_language or DEFAULT_SHEET_LANGUAGE).strip().lower()
+        normalized = (
+            (language or self.sheet_language or DEFAULT_SHEET_LANGUAGE).strip().lower()
+        )
         if normalized.startswith("ru"):
             return "ru"
         return "en"
@@ -325,7 +412,9 @@ class FinanceSheets:
                 return canonical
         return raw.lower() or "expense"
 
-    def _display_category(self, canonical_category: str, language: str | None = None) -> str:
+    def _display_category(
+        self, canonical_category: str, language: str | None = None
+    ) -> str:
         lang = self._normalize_sheet_language(language)
         return CATEGORY_LABELS[lang].get(canonical_category, canonical_category)
 
@@ -336,7 +425,9 @@ class FinanceSheets:
                 return canonical
         return raw
 
-    def _record_value(self, record: dict, aliases: dict[str, set[str]], key: str, default=""):
+    def _record_value(
+        self, record: dict, aliases: dict[str, set[str]], key: str, default=""
+    ):
         for alias in aliases[key]:
             if alias in record:
                 return record.get(alias, default)
@@ -353,7 +444,9 @@ class FinanceSheets:
     def _normalize_history_record(self, record: dict) -> dict:
         normalized: dict[str, str] = {}
         for key in HISTORY_HEADER_ALIASES:
-            normalized[key] = self._record_value(record, HISTORY_HEADER_ALIASES, key, 0 if key != "month" else "")
+            normalized[key] = self._record_value(
+                record, HISTORY_HEADER_ALIASES, key, 0 if key != "month" else ""
+            )
         return normalized
 
     def _get_sheet_language(self) -> str:
@@ -431,7 +524,9 @@ class FinanceSheets:
         safe_day = max(1, min(int(due_day), monthrange(base_year, base_month)[1]))
         return datetime.date(base_year, base_month, safe_day)
 
-    def is_expected_payment_due(self, due_day: int, today: datetime.date | None = None) -> bool:
+    def is_expected_payment_due(
+        self, due_day: int, today: datetime.date | None = None
+    ) -> bool:
         due_date = self.get_due_date(due_day, self.current_month_key(today))
         base = today or datetime.date.today()
         delta = (due_date - base).days
@@ -452,7 +547,9 @@ class FinanceSheets:
         return f"overdue by {abs(delta)} days"
 
     def _payment_from_row(self, row: list[str]) -> dict:
-        padded = (row + [""] * len(EXPECTED_PAYMENTS_HEADERS))[: len(EXPECTED_PAYMENTS_HEADERS)]
+        padded = (row + [""] * len(EXPECTED_PAYMENTS_HEADERS))[
+            : len(EXPECTED_PAYMENTS_HEADERS)
+        ]
         return {
             "id": str(padded[0]).strip(),
             "name": str(padded[1]).strip(),
@@ -466,7 +563,9 @@ class FinanceSheets:
         }
 
     def _status_from_row(self, row: list[str]) -> dict:
-        padded = (row + [""] * len(PAYMENT_STATUS_HEADERS))[: len(PAYMENT_STATUS_HEADERS)]
+        padded = (row + [""] * len(PAYMENT_STATUS_HEADERS))[
+            : len(PAYMENT_STATUS_HEADERS)
+        ]
         status = str(padded[2]).strip().lower() or "pending"
         if status not in PAYMENT_STATUS_VALUES:
             status = "pending"
@@ -509,11 +608,21 @@ class FinanceSheets:
     def list_expected_payments(self, active_only: bool = False) -> list[dict]:
         ws = self._get_expected_payments_ws()
         rows = ws.get_all_values()[1:]
-        payments = [self._payment_from_row(row) for row in rows if row and any(str(cell).strip() for cell in row)]
+        payments = [
+            self._payment_from_row(row)
+            for row in rows
+            if row and any(str(cell).strip() for cell in row)
+        ]
         payments = [payment for payment in payments if payment["id"]]
         if active_only:
             payments = [payment for payment in payments if payment["active"]]
-        payments.sort(key=lambda payment: (not payment["active"], payment["due_day"], payment["name"].lower()))
+        payments.sort(
+            key=lambda payment: (
+                not payment["active"],
+                payment["due_day"],
+                payment["name"].lower(),
+            )
+        )
         return payments
 
     def get_expected_payment(self, payment_id: str) -> dict | None:
@@ -522,7 +631,14 @@ class FinanceSheets:
                 return payment
         return None
 
-    def create_expected_payment(self, name: str, category: str, amount: float, due_day: int, currency: str | None = None) -> dict:
+    def create_expected_payment(
+        self,
+        name: str,
+        category: str,
+        amount: float,
+        due_day: int,
+        currency: str | None = None,
+    ) -> dict:
         ws = self._get_expected_payments_ws()
         now_iso = self._now_iso()
         payment = {
@@ -566,7 +682,9 @@ class FinanceSheets:
             if "amount" in fields:
                 payment["amount"] = round(float(fields["amount"]), 2)
             if "currency" in fields:
-                payment["currency"] = str(fields["currency"]).strip() or payment["currency"]
+                payment["currency"] = (
+                    str(fields["currency"]).strip() or payment["currency"]
+                )
             if "due_day" in fields:
                 payment["due_day"] = max(1, min(int(fields["due_day"]), 31))
             if "active" in fields:
@@ -575,17 +693,19 @@ class FinanceSheets:
 
             ws.update(
                 f"A{i}:I{i}",
-                [[
-                    payment["id"],
-                    payment["name"],
-                    self._display_category(payment["category"], "en"),
-                    payment["amount"],
-                    payment["currency"],
-                    payment["due_day"],
-                    "TRUE" if payment["active"] else "FALSE",
-                    payment["created_at"],
-                    payment["updated_at"],
-                ]],
+                [
+                    [
+                        payment["id"],
+                        payment["name"],
+                        self._display_category(payment["category"], "en"),
+                        payment["amount"],
+                        payment["currency"],
+                        payment["due_day"],
+                        "TRUE" if payment["active"] else "FALSE",
+                        payment["created_at"],
+                        payment["updated_at"],
+                    ]
+                ],
             )
             return payment
         return None
@@ -646,7 +766,9 @@ class FinanceSheets:
             if current["payment_id"] != payment_id or current["month"] != month:
                 continue
             if status is not None:
-                current["status"] = status if status in PAYMENT_STATUS_VALUES else "pending"
+                current["status"] = (
+                    status if status in PAYMENT_STATUS_VALUES else "pending"
+                )
             if last_reminded_at is not None:
                 current["last_reminded_at"] = last_reminded_at
             if paid_at is not None:
@@ -656,15 +778,17 @@ class FinanceSheets:
             current["updated_at"] = now_iso
             ws.update(
                 f"A{i}:G{i}",
-                [[
-                    current["payment_id"],
-                    current["month"],
-                    current["status"],
-                    current["last_reminded_at"],
-                    current["paid_at"],
-                    current["snooze_until"],
-                    current["updated_at"],
-                ]],
+                [
+                    [
+                        current["payment_id"],
+                        current["month"],
+                        current["status"],
+                        current["last_reminded_at"],
+                        current["paid_at"],
+                        current["snooze_until"],
+                        current["updated_at"],
+                    ]
+                ],
             )
             updated_status = current
             break
@@ -704,8 +828,12 @@ class FinanceSheets:
         )
 
     def snooze_payment(self, payment_id: str, month: str, days: int = 1) -> dict:
-        snooze_date = (datetime.date.today() + datetime.timedelta(days=days)).isoformat()
-        return self.upsert_payment_status(payment_id, month, status="snoozed", snooze_until=snooze_date)
+        snooze_date = (
+            datetime.date.today() + datetime.timedelta(days=days)
+        ).isoformat()
+        return self.upsert_payment_status(
+            payment_id, month, status="snoozed", snooze_until=snooze_date
+        )
 
     def record_payment_reminder(self, payment_id: str, month: str) -> dict:
         return self.upsert_payment_status(
@@ -750,7 +878,9 @@ class FinanceSheets:
             padded = row + [""] * (12 - len(row))
             padded = padded[:12]
             padded[1] = self._display_type(self._canonical_type(padded[1]), language)
-            padded[3] = self._display_category(self._canonical_category(padded[3]), language)
+            padded[3] = self._display_category(
+                self._canonical_category(padded[3]), language
+            )
             localized_rows.append(padded)
         ws.clear()
         ws.update(f"A1:L{len(localized_rows)}", localized_rows)
@@ -772,7 +902,9 @@ class FinanceSheets:
             except Exception:
                 plan = {}
             try:
-                project_accumulated = float(ws.acell(f"C{self._get_project_budget_row()}").value or 0)
+                project_accumulated = float(
+                    ws.acell(f"C{self._get_project_budget_row()}").value or 0
+                )
             except Exception:
                 project_accumulated = 0.0
 
@@ -790,7 +922,9 @@ class FinanceSheets:
             self.update_budget_fact(plan_month)
 
     def _localize_history_sheet(self, ws, language: str) -> None:
-        records = [self._normalize_history_record(record) for record in ws.get_all_records()]
+        records = [
+            self._normalize_history_record(record) for record in ws.get_all_records()
+        ]
         ws.clear()
         self._setup_history_sheet(ws, language)
         if not records:
@@ -844,8 +978,12 @@ class FinanceSheets:
         budget_ws.update_title(self._sheet_title("budget", DEFAULT_SHEET_LANGUAGE))
         history_ws.update_title(self._sheet_title("history", DEFAULT_SHEET_LANGUAGE))
         settings_ws.update_title(self._sheet_title("settings", DEFAULT_SHEET_LANGUAGE))
-        payments_ws.update_title(self._sheet_title("expected_payments", DEFAULT_SHEET_LANGUAGE))
-        payment_status_ws.update_title(self._sheet_title("payment_status", DEFAULT_SHEET_LANGUAGE))
+        payments_ws.update_title(
+            self._sheet_title("expected_payments", DEFAULT_SHEET_LANGUAGE)
+        )
+        payment_status_ws.update_title(
+            self._sheet_title("payment_status", DEFAULT_SHEET_LANGUAGE)
+        )
         self.sheet_language = DEFAULT_SHEET_LANGUAGE
 
         return {"success": True, "spreadsheet_url": self.get_spreadsheet_url()}
@@ -860,10 +998,16 @@ class FinanceSheets:
         except Exception:
             pass
         ws.update("A1:L1", [headers])
-        ws.format("A1:L1", {
-            "backgroundColor": {"red": 0.13, "green": 0.59, "blue": 0.95},
-            "textFormat": {"bold": True, "foregroundColor": {"red": 1, "green": 1, "blue": 1}},
-        })
+        ws.format(
+            "A1:L1",
+            {
+                "backgroundColor": {"red": 0.13, "green": 0.59, "blue": 0.95},
+                "textFormat": {
+                    "bold": True,
+                    "foregroundColor": {"red": 1, "green": 1, "blue": 1},
+                },
+            },
+        )
         sheet_styler.apply_tx_styling(self.sh, ws)
 
     def _get_row_layout(self) -> dict:
@@ -899,86 +1043,191 @@ class FinanceSheets:
         ws.freeze(rows=1)
         # Title row
         ws.update("A1:F1", [text["header"]])
-        ws.format("A1:F1", {
-            "backgroundColor": {"red": 0.2, "green": 0.2, "blue": 0.2},
-            "textFormat": {"bold": True, "foregroundColor": {"red": 1, "green": 1, "blue": 1}},
-        })
+        ws.format(
+            "A1:F1",
+            {
+                "backgroundColor": {"red": 0.2, "green": 0.2, "blue": 0.2},
+                "textFormat": {
+                    "bold": True,
+                    "foregroundColor": {"red": 1, "green": 1, "blue": 1},
+                },
+            },
+        )
 
         # 🔴 Red zone
         r_h = L["red_header"]
         ws.update(f"A{r_h}:F{r_h}", [[text["red_header"], "", "", "", "", ""]])
-        ws.format(f"A{r_h}:F{r_h}", {
-            "backgroundColor": {"red": 0.95, "green": 0.8, "blue": 0.8},
-            "textFormat": {"bold": True, "foregroundColor": {"red": 0.6, "green": 0.1, "blue": 0.1}},
-        })
+        ws.format(
+            f"A{r_h}:F{r_h}",
+            {
+                "backgroundColor": {"red": 0.95, "green": 0.8, "blue": 0.8},
+                "textFormat": {
+                    "bold": True,
+                    "foregroundColor": {"red": 0.6, "green": 0.1, "blue": 0.1},
+                },
+            },
+        )
         for i, cat in enumerate(RED_ZONE_CATEGORIES):
             row = L["red_start"] + i
-            ws.update(f"A{row}:F{row}", [[self._display_category(cat, lang), 0, 0, f"=B{row}-C{row}", "red", ""]])
-        ws.format(f"A{L['red_start']}:F{L['red_end']}", {
-            "backgroundColor": {"red": 1.0, "green": 0.93, "blue": 0.93},
-        })
+            ws.update(
+                f"A{row}:F{row}",
+                [
+                    [
+                        self._display_category(cat, lang),
+                        0,
+                        0,
+                        f"=B{row}-C{row}",
+                        "red",
+                        "",
+                    ]
+                ],
+            )
+        ws.format(
+            f"A{L['red_start']}:F{L['red_end']}",
+            {
+                "backgroundColor": {"red": 1.0, "green": 0.93, "blue": 0.93},
+            },
+        )
         r_it = L["red_itogo"]
-        ws.update(f"A{r_it}:F{r_it}", [[text["red_total"],
-            f"=SUM(B{L['red_start']}:B{L['red_end']})",
-            f"=SUM(C{L['red_start']}:C{L['red_end']})",
-            f"=B{r_it}-C{r_it}", "", ""]])
+        ws.update(
+            f"A{r_it}:F{r_it}",
+            [
+                [
+                    text["red_total"],
+                    f"=SUM(B{L['red_start']}:B{L['red_end']})",
+                    f"=SUM(C{L['red_start']}:C{L['red_end']})",
+                    f"=B{r_it}-C{r_it}",
+                    "",
+                    "",
+                ]
+            ],
+        )
         ws.format(f"A{r_it}:F{r_it}", {"textFormat": {"bold": True}})
 
         # 🟡 Yellow zone
         y_h = L["yellow_header"]
         ws.update(f"A{y_h}:F{y_h}", [[text["yellow_header"], "", "", "", "", ""]])
-        ws.format(f"A{y_h}:F{y_h}", {
-            "backgroundColor": {"red": 1.0, "green": 0.95, "blue": 0.7},
-            "textFormat": {"bold": True, "foregroundColor": {"red": 0.5, "green": 0.35, "blue": 0.0}},
-        })
+        ws.format(
+            f"A{y_h}:F{y_h}",
+            {
+                "backgroundColor": {"red": 1.0, "green": 0.95, "blue": 0.7},
+                "textFormat": {
+                    "bold": True,
+                    "foregroundColor": {"red": 0.5, "green": 0.35, "blue": 0.0},
+                },
+            },
+        )
         for i, cat in enumerate(YELLOW_ZONE_CATEGORIES):
             row = L["yellow_start"] + i
-            ws.update(f"A{row}:F{row}", [[self._display_category(cat, lang), 0, 0, f"=B{row}-C{row}", "yellow", ""]])
-        ws.format(f"A{L['yellow_start']}:F{L['yellow_end']}", {
-            "backgroundColor": {"red": 1.0, "green": 0.98, "blue": 0.85},
-        })
+            ws.update(
+                f"A{row}:F{row}",
+                [
+                    [
+                        self._display_category(cat, lang),
+                        0,
+                        0,
+                        f"=B{row}-C{row}",
+                        "yellow",
+                        "",
+                    ]
+                ],
+            )
+        ws.format(
+            f"A{L['yellow_start']}:F{L['yellow_end']}",
+            {
+                "backgroundColor": {"red": 1.0, "green": 0.98, "blue": 0.85},
+            },
+        )
         y_it = L["yellow_itogo"]
-        ws.update(f"A{y_it}:F{y_it}", [[text["yellow_total"],
-            f"=SUM(B{L['yellow_start']}:B{L['yellow_end']})",
-            f"=SUM(C{L['yellow_start']}:C{L['yellow_end']})",
-            f"=B{y_it}-C{y_it}", "", ""]])
+        ws.update(
+            f"A{y_it}:F{y_it}",
+            [
+                [
+                    text["yellow_total"],
+                    f"=SUM(B{L['yellow_start']}:B{L['yellow_end']})",
+                    f"=SUM(C{L['yellow_start']}:C{L['yellow_end']})",
+                    f"=B{y_it}-C{y_it}",
+                    "",
+                    "",
+                ]
+            ],
+        )
         ws.format(f"A{y_it}:F{y_it}", {"textFormat": {"bold": True}})
 
         # 🟢 Green zone
         g_h = L["green_header"]
         ws.update(f"A{g_h}:F{g_h}", [[text["green_header"], "", "", "", "", ""]])
-        ws.format(f"A{g_h}:F{g_h}", {
-            "backgroundColor": {"red": 0.8, "green": 0.95, "blue": 0.8},
-            "textFormat": {"bold": True, "foregroundColor": {"red": 0.1, "green": 0.45, "blue": 0.1}},
-        })
+        ws.format(
+            f"A{g_h}:F{g_h}",
+            {
+                "backgroundColor": {"red": 0.8, "green": 0.95, "blue": 0.8},
+                "textFormat": {
+                    "bold": True,
+                    "foregroundColor": {"red": 0.1, "green": 0.45, "blue": 0.1},
+                },
+            },
+        )
         for i, cat in enumerate(GREEN_ZONE_CATEGORIES):
             row = L["green_start"] + i
-            ws.update(f"A{row}:F{row}", [[self._display_category(cat, lang), 0, 0, f"=B{row}-C{row}", "green", ""]])
-        ws.format(f"A{L['green_start']}:F{L['green_end']}", {
-            "backgroundColor": {"red": 0.92, "green": 1.0, "blue": 0.92},
-        })
+            ws.update(
+                f"A{row}:F{row}",
+                [
+                    [
+                        self._display_category(cat, lang),
+                        0,
+                        0,
+                        f"=B{row}-C{row}",
+                        "green",
+                        "",
+                    ]
+                ],
+            )
+        ws.format(
+            f"A{L['green_start']}:F{L['green_end']}",
+            {
+                "backgroundColor": {"red": 0.92, "green": 1.0, "blue": 0.92},
+            },
+        )
         g_it = L["green_itogo"]
-        ws.update(f"A{g_it}:F{g_it}", [[text["green_total"],
-            f"=SUM(B{L['green_start']}:B{L['green_end']})",
-            f"=SUM(C{L['green_start']}:C{L['green_end']})",
-            f"=B{g_it}-C{g_it}", "", ""]])
+        ws.update(
+            f"A{g_it}:F{g_it}",
+            [
+                [
+                    text["green_total"],
+                    f"=SUM(B{L['green_start']}:B{L['green_end']})",
+                    f"=SUM(C{L['green_start']}:C{L['green_end']})",
+                    f"=B{g_it}-C{g_it}",
+                    "",
+                    "",
+                ]
+            ],
+        )
         ws.format(f"A{g_it}:F{g_it}", {"textFormat": {"bold": True}})
 
         # 💰 Income + Projects block
         i_h = L["inc_header"]
         ws.update(f"A{i_h}:F{i_h}", [[text["income_block"], "", "", "", "", ""]])
-        ws.format(f"A{i_h}:F{i_h}", {
-            "backgroundColor": {"red": 0.8, "green": 0.85, "blue": 0.95},
-            "textFormat": {"bold": True},
-        })
+        ws.format(
+            f"A{i_h}:F{i_h}",
+            {
+                "backgroundColor": {"red": 0.8, "green": 0.85, "blue": 0.95},
+                "textFormat": {"bold": True},
+            },
+        )
         i_r = L["inc_row"]
         ws.update(f"A{i_r}:F{i_r}", [[text["planned_income"], 0, 0, "", "", ""]])
         p_r = L["proj_row"]
-        ws.update(f"A{p_r}:F{p_r}", [[text["project_budget"], 0, 0, "", "", text["project_note"]]])
-        ws.format(f"A{p_r}:F{p_r}", {
-            "backgroundColor": {"red": 0.85, "green": 0.78, "blue": 0.95},
-            "textFormat": {"bold": True},
-        })
+        ws.update(
+            f"A{p_r}:F{p_r}",
+            [[text["project_budget"], 0, 0, "", "", text["project_note"]]],
+        )
+        ws.format(
+            f"A{p_r}:F{p_r}",
+            {
+                "backgroundColor": {"red": 0.85, "green": 0.78, "blue": 0.95},
+                "textFormat": {"bold": True},
+            },
+        )
 
     def _setup_history_sheet(self, ws, language: str | None = None):
         headers = HISTORY_HEADERS[self._normalize_sheet_language(language)]
@@ -988,10 +1237,16 @@ class FinanceSheets:
         except Exception:
             pass
         ws.update("A1:H1", [headers])
-        ws.format("A1:H1", {
-            "backgroundColor": {"red": 0.2, "green": 0.7, "blue": 0.3},
-            "textFormat": {"bold": True, "foregroundColor": {"red": 1, "green": 1, "blue": 1}},
-        })
+        ws.format(
+            "A1:H1",
+            {
+                "backgroundColor": {"red": 0.2, "green": 0.7, "blue": 0.3},
+                "textFormat": {
+                    "bold": True,
+                    "foregroundColor": {"red": 1, "green": 1, "blue": 1},
+                },
+            },
+        )
         ws.freeze(rows=1)
 
     # ─── Budget Plan Management ─────────────────────────────────────────────────
@@ -999,8 +1254,14 @@ class FinanceSheets:
     def _get_budget_ws(self):
         return self._worksheet("budget")
 
-    def set_budget_plan(self, month: str, income: float,
-                        red_limits: dict, yellow_limit: float, green_limit: float) -> dict:
+    def set_budget_plan(
+        self,
+        month: str,
+        income: float,
+        red_limits: dict,
+        yellow_limit: float,
+        green_limit: float,
+    ) -> dict:
         ws = self._get_budget_ws()
         L = self._get_row_layout()
         ws.update("F1", [[f"📅 {month}"]])
@@ -1009,7 +1270,11 @@ class FinanceSheets:
             ws.update(f"B{L['red_start'] + i}", [[red_limits.get(cat, 0)]])
 
         # Yellow: distribute yellow_limit equally across yellow categories
-        per_yellow = round(yellow_limit / len(YELLOW_ZONE_CATEGORIES), 2) if YELLOW_ZONE_CATEGORIES else 0
+        per_yellow = (
+            round(yellow_limit / len(YELLOW_ZONE_CATEGORIES), 2)
+            if YELLOW_ZONE_CATEGORIES
+            else 0
+        )
         for i in range(len(YELLOW_ZONE_CATEGORIES)):
             ws.update(f"B{L['yellow_start'] + i}", [[per_yellow]])
 
@@ -1105,7 +1370,8 @@ class FinanceSheets:
         def _sum(cat_list, tx_type="expense"):
             return sum(
                 float(str(r.get("amount", 0)).replace(",", "."))
-                for r in month_tx if r.get("type") == tx_type and r.get("category") in cat_list
+                for r in month_tx
+                if r.get("type") == tx_type and r.get("category") in cat_list
             )
 
         ws_b = self._get_budget_ws()
@@ -1132,8 +1398,15 @@ class FinanceSheets:
 
     # ─── Write transactions ─────────────────────────────────────────────────────
 
-    def add_transaction(self, amount: float, category: str, description: str,
-                        trans_type: str, trans_date: Optional[str] = None, skip_auto_rules: bool = False) -> dict:
+    def add_transaction(
+        self,
+        amount: float,
+        category: str,
+        description: str,
+        trans_type: str,
+        trans_date: Optional[str] = None,
+        skip_auto_rules: bool = False,
+    ) -> dict:
         ws = self._worksheet("transactions")
         now = datetime.datetime.now()
 
@@ -1148,16 +1421,23 @@ class FinanceSheets:
         isocal = dt.isocalendar()
         week_str = f"{dt.year}-W{isocal[1]:02d}"
         month_str = dt.strftime("%Y-%m")
-        quarter_str = f"{dt.year}-Q{(dt.month-1)//3 + 1}"
+        quarter_str = f"{dt.year}-Q{(dt.month - 1) // 3 + 1}"
         half_str = f"{dt.year}-H1" if dt.month <= 6 else f"{dt.year}-H2"
 
         row = [
             trans_date,
             self._display_type(self._canonical_type(trans_type), self.sheet_language),
             round(float(amount), 2),
-            self._display_category(self._canonical_category(category), self.sheet_language),
+            self._display_category(
+                self._canonical_category(category), self.sheet_language
+            ),
             description,
-            self.currency, week_str, month_str, quarter_str, half_str, str(dt.year),
+            self.currency,
+            week_str,
+            month_str,
+            quarter_str,
+            half_str,
+            str(dt.year),
             now.strftime("%d.%m.%Y %H:%M"),
         ]
         ws.append_row(row, value_input_option="USER_ENTERED")
@@ -1174,26 +1454,30 @@ class FinanceSheets:
                 goals = self.get_saving_goals()
                 for goal in goals:
                     rule_str = goal.get("auto_rule", "").strip()
-                    if not rule_str: continue
+                    if not rule_str:
+                        continue
                     import json
+
                     try:
                         rule = json.loads(rule_str)
                     except Exception:
                         continue
-                    
+
                     trigger = rule.get("trigger")
                     typ = rule.get("type")
                     val = float(rule.get("value", 0))
-                    
+
                     trigger_match = False
                     canon_type = self._canonical_type(trans_type)
                     if trigger == "income" and canon_type == "income":
                         trigger_match = True
                     elif trigger == "expense" and canon_type == "expense":
                         rcat = rule.get("category")
-                        if not rcat or self._canonical_category(rcat) == self._canonical_category(category):
+                        if not rcat or self._canonical_category(
+                            rcat
+                        ) == self._canonical_category(category):
                             trigger_match = True
-                            
+
                     if trigger_match:
                         added_amount = 0.0
                         if typ == "percent" and val > 0:
@@ -1202,12 +1486,13 @@ class FinanceSheets:
                             rem = float(amount) % val
                             if rem > 0:
                                 added_amount = round(val - rem, 2)
-                                
+
                         if added_amount > 0:
-                            self.update_saving_goal(goal["goal_id"], added_amount, description="auto_rule")
+                            self.update_saving_goal(
+                                goal["goal_id"], added_amount, description="auto_rule"
+                            )
             except Exception:
                 pass
-
 
         result = {
             "success": True,
@@ -1227,26 +1512,45 @@ class FinanceSheets:
             if self._canonical_type(trans_type) == "expense":
                 plan = self.get_budget_plan(month_str)
                 if plan:
-                    all_tx = [self._normalize_tx_record(r) for r in ws.get_all_records()]
-                    month_tx = [r for r in all_tx if r.get("month") == month_str and r.get("type") == "expense"]
-                    
-                    zone = CATEGORY_TO_ZONE.get(self._canonical_category(category), "unknown")
+                    all_tx = [
+                        self._normalize_tx_record(r) for r in ws.get_all_records()
+                    ]
+                    month_tx = [
+                        r
+                        for r in all_tx
+                        if r.get("month") == month_str and r.get("type") == "expense"
+                    ]
+
+                    zone = CATEGORY_TO_ZONE.get(
+                        self._canonical_category(category), "unknown"
+                    )
                     cat_plan = 0
                     if zone == "red" and "red" in plan:
-                        cat_plan = plan["red"].get(self._canonical_category(category), 0)
-                        
-                    zone_limits = {"yellow": plan.get("yellow", 0), "green": plan.get("green", 0)}
-                    
+                        cat_plan = plan["red"].get(
+                            self._canonical_category(category), 0
+                        )
+
+                    zone_limits = {
+                        "yellow": plan.get("yellow", 0),
+                        "green": plan.get("green", 0),
+                    }
+
                     alerts = []
-                    
+
                     # Compute Category Fact
-                    cat_fact = sum(float(str(r.get("amount", 0)).replace(",", ".")) for r in month_tx if r.get("category") == self._canonical_category(category))
+                    cat_fact = sum(
+                        float(str(r.get("amount", 0)).replace(",", "."))
+                        for r in month_tx
+                        if r.get("category") == self._canonical_category(category)
+                    )
                     if cat_plan > 0:
                         ratio = cat_fact / cat_plan
                         if ratio >= 0.95:
                             remaining = round(cat_plan - cat_fact, 2)
-                            alerts.append(f"Категория '{self._canonical_category(category)}' исчерпана на {int(ratio*100)}%. Остаток: {remaining} {self.currency}.")
-                            
+                            alerts.append(
+                                f"Категория '{self._canonical_category(category)}' исчерпана на {int(ratio * 100)}%. Остаток: {remaining} {self.currency}."
+                            )
+
                     # Compute Zone Fact
                     if zone in ("yellow", "green"):
                         zone_plan = zone_limits[zone]
@@ -1255,13 +1559,23 @@ class FinanceSheets:
                                 zone_cats = YELLOW_ZONE_CATEGORIES
                             else:
                                 zone_cats = GREEN_ZONE_CATEGORIES
-                            zone_fact = sum(float(str(r.get("amount", 0)).replace(",", ".")) for r in month_tx if r.get("category") in zone_cats)
+                            zone_fact = sum(
+                                float(str(r.get("amount", 0)).replace(",", "."))
+                                for r in month_tx
+                                if r.get("category") in zone_cats
+                            )
                             ratio = zone_fact / zone_plan
                             if ratio >= 0.90:
                                 remaining = round(zone_plan - zone_fact, 2)
-                                z_name = "Желтая зона" if zone == "yellow" else "Зеленая зона"
-                                alerts.append(f"{z_name} исчерпана на {int(ratio*100)}%. Остаток: {remaining} {self.currency}.")
-                    
+                                z_name = (
+                                    "Желтая зона"
+                                    if zone == "yellow"
+                                    else "Зеленая зона"
+                                )
+                                alerts.append(
+                                    f"{z_name} исчерпана на {int(ratio * 100)}%. Остаток: {remaining} {self.currency}."
+                                )
+
                     if alerts:
                         result["critical_alerts"] = alerts
         except Exception:
@@ -1282,8 +1596,11 @@ class FinanceSheets:
             row = all_values[idx]
             row_dict = {
                 "row_id": idx + 1,
-                "date": row[0], "type": row[1], "amount": row[2],
-                "category": row[3], "description": row[4],
+                "date": row[0],
+                "type": row[1],
+                "amount": row[2],
+                "category": row[3],
+                "description": row[4],
             }
             if not query or query.lower() in " ".join(row).lower():
                 results.append(row_dict)
@@ -1299,11 +1616,22 @@ class FinanceSheets:
         last_row = len(all_values)
         deleted = all_values[last_row - 1]
         ws.delete_rows(last_row)
-        month_str = deleted[7] if len(deleted) > 7 else datetime.datetime.now().strftime("%Y-%m")
+        month_str = (
+            deleted[7]
+            if len(deleted) > 7
+            else datetime.datetime.now().strftime("%Y-%m")
+        )
         self._sync_history(month_str)
         self.update_budget_fact(month_str)
-        return {"success": True, "deleted": {"date": deleted[0], "type": deleted[1],
-                                              "amount": deleted[2], "category": deleted[3]}}
+        return {
+            "success": True,
+            "deleted": {
+                "date": deleted[0],
+                "type": deleted[1],
+                "amount": deleted[2],
+                "category": deleted[3],
+            },
+        }
 
     def delete_transaction(self, row_id: int) -> dict:
         ws = self._worksheet("transactions")
@@ -1312,14 +1640,31 @@ class FinanceSheets:
             return {"success": False, "message": "Некорректный ID строки"}
         deleted = all_values[row_id - 1]
         ws.delete_rows(row_id)
-        month_str = deleted[7] if len(deleted) > 7 else datetime.datetime.now().strftime("%Y-%m")
+        month_str = (
+            deleted[7]
+            if len(deleted) > 7
+            else datetime.datetime.now().strftime("%Y-%m")
+        )
         self._sync_history(month_str)
         self.update_budget_fact(month_str)
-        return {"success": True, "deleted": {"date": deleted[0], "type": deleted[1],
-                                              "amount": deleted[2], "category": deleted[3]}}
+        return {
+            "success": True,
+            "deleted": {
+                "date": deleted[0],
+                "type": deleted[1],
+                "amount": deleted[2],
+                "category": deleted[3],
+            },
+        }
 
-    def edit_transaction(self, row_id: int, amount: float = None, category: str = None,
-                         description: str = None, trans_date: str = None) -> dict:
+    def edit_transaction(
+        self,
+        row_id: int,
+        amount: float = None,
+        category: str = None,
+        description: str = None,
+        trans_date: str = None,
+    ) -> dict:
         ws = self._worksheet("transactions")
         all_values = ws.get_all_values()
         if row_id <= 1 or row_id > len(all_values):
@@ -1330,7 +1675,9 @@ class FinanceSheets:
         if amount is not None:
             row[2] = str(round(float(amount), 2))
         if category is not None:
-            row[3] = self._display_category(self._canonical_category(category), self.sheet_language)
+            row[3] = self._display_category(
+                self._canonical_category(category), self.sheet_language
+            )
         if description is not None:
             row[4] = description
 
@@ -1342,7 +1689,7 @@ class FinanceSheets:
         isocal = dt.isocalendar()
         row[6] = f"{dt.year}-W{isocal[1]:02d}"
         row[7] = dt.strftime("%Y-%m")
-        row[8] = f"{dt.year}-Q{(dt.month - 1)//3 + 1}"
+        row[8] = f"{dt.year}-Q{(dt.month - 1) // 3 + 1}"
         row[9] = f"{dt.year}-H1" if dt.month <= 6 else f"{dt.year}-H2"
         row[10] = str(dt.year)
         if len(row) < 12:
@@ -1350,9 +1697,13 @@ class FinanceSheets:
         row[11] = datetime.datetime.now().strftime("%d.%m.%Y %H:%M")
 
         if len(row) > 1:
-            row[1] = self._display_type(self._canonical_type(row[1]), self.sheet_language)
+            row[1] = self._display_type(
+                self._canonical_type(row[1]), self.sheet_language
+            )
         ws.update(f"A{row_id}:L{row_id}", [row[:12]])
-        month_str = row[7] if len(row) > 7 else datetime.datetime.now().strftime("%Y-%m")
+        month_str = (
+            row[7] if len(row) > 7 else datetime.datetime.now().strftime("%Y-%m")
+        )
         self._sync_history(month_str)
         self.update_budget_fact(month_str)
         return {"success": True, "message": "Успешно изменено"}
@@ -1360,7 +1711,10 @@ class FinanceSheets:
     # ─── Aggregations ───────────────────────────────────────────────────────────
 
     def _sync_history(self, month: str):
-        records = [self._normalize_tx_record(r) for r in self._worksheet("transactions").get_all_records()]
+        records = [
+            self._normalize_tx_record(r)
+            for r in self._worksheet("transactions").get_all_records()
+        ]
         month_records = [r for r in records if r.get("month") == month]
 
         def _s(cat_filter=None, type_filter=None):
@@ -1380,10 +1734,22 @@ class FinanceSheets:
         balance = income - total_exp
 
         ws_hist = self._worksheet("history")
-        hist_records = [self._normalize_history_record(r) for r in ws_hist.get_all_records()]
-        row_idx = next((i + 2 for i, r in enumerate(hist_records) if r.get("month") == month), None)
-        row_data = [month, round(income, 2), round(obligatory, 2), round(fun, 2),
-                    round(one_time, 2), round(savings, 2), round(total_exp, 2), round(balance, 2)]
+        hist_records = [
+            self._normalize_history_record(r) for r in ws_hist.get_all_records()
+        ]
+        row_idx = next(
+            (i + 2 for i, r in enumerate(hist_records) if r.get("month") == month), None
+        )
+        row_data = [
+            month,
+            round(income, 2),
+            round(obligatory, 2),
+            round(fun, 2),
+            round(one_time, 2),
+            round(savings, 2),
+            round(total_exp, 2),
+            round(balance, 2),
+        ]
         if row_idx:
             ws_hist.update(f"A{row_idx}:H{row_idx}", [row_data])
         else:
@@ -1397,8 +1763,11 @@ class FinanceSheets:
         tx_ws = self._worksheet("transactions")
         all_tx = [self._normalize_tx_record(r) for r in tx_ws.get_all_records()]
         today_tx = [r for r in all_tx if r.get("date") == today_str]
-        today_exp = sum(float(str(r.get("amount", 0)).replace(",", "."))
-                        for r in today_tx if r.get("type") == "expense")
+        today_exp = sum(
+            float(str(r.get("amount", 0)).replace(",", "."))
+            for r in today_tx
+            if r.get("type") == "expense"
+        )
 
         plan = self.get_budget_plan(month_str)
 
@@ -1455,20 +1824,36 @@ class FinanceSheets:
             except Exception:
                 return 0.0
 
-        income = sum(_to_float(r.get("amount")) for r in month_tx if r.get("type") == "income")
-        red = sum(_to_float(r.get("amount")) for r in month_tx
-                  if r.get("type") == "expense" and r.get("category") in RED_ZONE_CATEGORIES)
-        yellow = sum(_to_float(r.get("amount")) for r in month_tx
-                     if r.get("type") == "expense" and r.get("category") in YELLOW_ZONE_CATEGORIES)
-        green = sum(_to_float(r.get("amount")) for r in month_tx
-                    if r.get("type") == "expense" and r.get("category") in GREEN_ZONE_CATEGORIES)
-        savings = sum(_to_float(r.get("amount")) for r in month_tx if r.get("type") == "savings")
+        income = sum(
+            _to_float(r.get("amount")) for r in month_tx if r.get("type") == "income"
+        )
+        red = sum(
+            _to_float(r.get("amount"))
+            for r in month_tx
+            if r.get("type") == "expense" and r.get("category") in RED_ZONE_CATEGORIES
+        )
+        yellow = sum(
+            _to_float(r.get("amount"))
+            for r in month_tx
+            if r.get("type") == "expense"
+            and r.get("category") in YELLOW_ZONE_CATEGORIES
+        )
+        green = sum(
+            _to_float(r.get("amount"))
+            for r in month_tx
+            if r.get("type") == "expense" and r.get("category") in GREEN_ZONE_CATEGORIES
+        )
+        savings = sum(
+            _to_float(r.get("amount")) for r in month_tx if r.get("type") == "savings"
+        )
 
         categories_breakdown = {}
         for r in month_tx:
             if r.get("type") == "expense":
                 cat = r.get("category", "Unknown")
-                categories_breakdown[cat] = categories_breakdown.get(cat, 0.0) + _to_float(r.get("amount"))
+                categories_breakdown[cat] = categories_breakdown.get(
+                    cat, 0.0
+                ) + _to_float(r.get("amount"))
 
         total_expense = red + yellow + green
         balance = income - total_expense
@@ -1477,10 +1862,7 @@ class FinanceSheets:
         except Exception:
             plan = {}
 
-        recent = [
-            r for r in reversed(all_tx)
-            if str(r.get("month", "")) == month
-        ][:10]
+        recent = [r for r in reversed(all_tx) if str(r.get("month", "")) == month][:10]
 
         return {
             "period": month,
@@ -1510,7 +1892,9 @@ class FinanceSheets:
         records = [self._normalize_tx_record(r) for r in tx_ws.get_all_records()]
         if month:
             month_key = str(month).strip()
-            records = [r for r in records if str(r.get("month", "")).strip() == month_key]
+            records = [
+                r for r in records if str(r.get("month", "")).strip() == month_key
+            ]
         return records
 
     # ─── Savings Goals ─────────────────────────────────────────────────────────
@@ -1534,8 +1918,11 @@ class FinanceSheets:
             "created_at": str(row.get("created_at", "")).strip(),
         }
 
-    def create_saving_goal(self, name: str, target_amount: float, deadline: str, auto_rule: str = "") -> dict:
+    def create_saving_goal(
+        self, name: str, target_amount: float, deadline: str, auto_rule: str = ""
+    ) -> dict:
         import uuid
+
         ws = self._worksheet("savings_goals")
         goal_id = str(uuid.uuid4())[:8]
         row = [
@@ -1549,14 +1936,22 @@ class FinanceSheets:
             self._now_iso(),
         ]
         ws.append_row(row, value_input_option="USER_ENTERED")
-        return {"success": True, "goal_id": goal_id, "name": name, "target_amount": target_amount, "auto_rule": auto_rule}
+        return {
+            "success": True,
+            "goal_id": goal_id,
+            "name": name,
+            "target_amount": target_amount,
+            "auto_rule": auto_rule,
+        }
 
-    def update_saving_goal(self, goal_id: str, add_amount: float, description: str = "") -> dict:
+    def update_saving_goal(
+        self, goal_id: str, add_amount: float, description: str = ""
+    ) -> dict:
         ws = self._worksheet("savings_goals")
         records = ws.get_all_values()
         if len(records) <= 1:
             return {"success": False, "error": "No goals found"}
-        
+
         headers = records[0]
         try:
             id_idx = headers.index("goal_id")
@@ -1564,19 +1959,29 @@ class FinanceSheets:
             name_idx = headers.index("name")
         except ValueError:
             return {"success": False, "error": "Invalid sheet format"}
-            
+
         for i, row in enumerate(records[1:], start=2):
             if len(row) > id_idx and row[id_idx].strip() == goal_id:
-                current_saved = self._safe_float(row[saved_idx] if len(row) > saved_idx else "0")
+                current_saved = self._safe_float(
+                    row[saved_idx] if len(row) > saved_idx else "0"
+                )
                 new_saved = current_saved + float(add_amount)
                 ws.update_cell(i, saved_idx + 1, round(new_saved, 2))
                 name = row[name_idx] if len(row) > name_idx else "Unknown"
-                
+
                 # If positive, we ensure it's logged as a savings transaction in the budget
                 if add_amount > 0:
-                    desc_text = f"Копилка '{name}'" + (f" ({description})" if description else "")
-                    self.add_transaction(add_amount, "Копилка", desc_text, "savings", skip_auto_rules=True)
-                    
+                    desc_text = f"Копилка '{name}'" + (
+                        f" ({description})" if description else ""
+                    )
+                    self.add_transaction(
+                        add_amount,
+                        "Копилка",
+                        desc_text,
+                        "savings",
+                        skip_auto_rules=True,
+                    )
+
                 return {"success": True, "goal_id": goal_id, "new_saved": new_saved}
         return {"success": False, "error": "Goal not found"}
 
