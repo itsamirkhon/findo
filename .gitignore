@@ -32,6 +32,7 @@ build/
 
 # Drafts and posts
 .releases/RELEASE_NOTES_DRAFTS.md
+.releases/FEATURE_IDEAS.md
 .releases/BLOG_POST.md
 
 # Database files (if used later)

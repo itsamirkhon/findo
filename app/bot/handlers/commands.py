@@ -34,6 +34,7 @@ def help_text() -> str:
         "/export  — export transactions CSV\n"
         "/settings — bot settings\n"
         "/payments — expected payments manager\n"
+        "/analytics — advanced AI financial analytics\n"
         "/clear   — full reset with confirmation\n"
         "/help    — this help message\n\n"
         "*Example phrases:*\n"
@@ -61,6 +62,18 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not allowed(update.effective_user.id):
         return
     await update.message.reply_text(help_text(), parse_mode="Markdown")
+
+
+async def cmd_analytics(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if not allowed(update.effective_user.id):
+        return
+    await ctx.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    prompt = (
+        "Пользователь запросил глубокую финансовую аналитику. ПРОАНАЛИЗИРУЙ данные (используй get_stats_by_month для "
+        "текущего и прошлого месяцев для сравнения). Сравни траты по категориям, найди АНОМАЛИИ "
+        "(сильный рост расходов), оцени выполнение плана и дай 2-3 практичных совета по оптимизации."
+    )
+    await reply_agent_stream(update, prompt)
 
 
 async def cmd_sheet(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:

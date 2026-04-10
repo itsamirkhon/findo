@@ -48,7 +48,11 @@ async def monthly_summary(context: ContextTypes.DEFAULT_TYPE):
     """Monthly report + Plan recommendations."""
     agent = context.job.data["agent"]
     
-    prompt = "Подведи итоги прошедшего месяца (используй get_dashboard). Дай оценку выполнению Плана и посоветуй, как скорректировать бюджет на следующий месяц."
+    prompt = (
+        "Подведи глубокие итоги прошедшего месяца. ПРОАНАЛИЗИРУЙ данные (используй get_stats_by_month для прошлого и позапрошлого месяцев). "
+        "Сравни траты по категориям, найди АНОМАЛИИ (резкий рост) и дай оценку выполнению Плана. "
+        "Дай 2-3 жестких, но полезных совета по оптимизации бюджета на новый месяц."
+    )
     try:
         text = await agent.process(prompt, is_job=True)
     except Exception as e:

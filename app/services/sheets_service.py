@@ -1156,6 +1156,52 @@ class FinanceSheets:
         }
         if contribution > 0:
             result["project_budget_contribution"] = contribution
+
+        # Smart Alerts Logic
+        try:
+            if self._canonical_type(trans_type) == "expense":
+                plan = self.get_budget_plan(month_str)
+                if plan:
+                    all_tx = [self._normalize_tx_record(r) for r in ws.get_all_records()]
+                    month_tx = [r for r in all_tx if r.get("month") == month_str and r.get("type") == "expense"]
+                    
+                    zone = CATEGORY_TO_ZONE.get(self._canonical_category(category), "unknown")
+                    cat_plan = 0
+                    if zone == "red" and "red" in plan:
+                        cat_plan = plan["red"].get(self._canonical_category(category), 0)
+                        
+                    zone_limits = {"yellow": plan.get("yellow", 0), "green": plan.get("green", 0)}
+                    
+                    alerts = []
+                    
+                    # Compute Category Fact
+                    cat_fact = sum(float(str(r.get("amount", 0)).replace(",", ".")) for r in month_tx if r.get("category") == self._canonical_category(category))
+                    if cat_plan > 0:
+                        ratio = cat_fact / cat_plan
+                        if ratio >= 0.95:
+                            remaining = round(cat_plan - cat_fact, 2)
+                            alerts.append(f"Категория '{self._canonical_category(category)}' исчерпана на {int(ratio*100)}%. Остаток: {remaining} {self.currency}.")
+                            
+                    # Compute Zone Fact
+                    if zone in ("yellow", "green"):
+                        zone_plan = zone_limits[zone]
+                        if zone_plan > 0:
+                            if zone == "yellow":
+                                zone_cats = YELLOW_ZONE_CATEGORIES
+                            else:
+                                zone_cats = GREEN_ZONE_CATEGORIES
+                            zone_fact = sum(float(str(r.get("amount", 0)).replace(",", ".")) for r in month_tx if r.get("category") in zone_cats)
+                            ratio = zone_fact / zone_plan
+                            if ratio >= 0.90:
+                                remaining = round(zone_plan - zone_fact, 2)
+                                z_name = "Желтая зона" if zone == "yellow" else "Зеленая зона"
+                                alerts.append(f"{z_name} исчерпана на {int(ratio*100)}%. Остаток: {remaining} {self.currency}.")
+                    
+                    if alerts:
+                        result["critical_alerts"] = alerts
+        except Exception:
+            pass  # Fail gracefully without blocking the transaction
+
         return result
 
     # ─── Search / Edit / Delete ─────────────────────────────────────────────────
@@ -1353,6 +1399,12 @@ class FinanceSheets:
                     if r.get("type") == "expense" and r.get("category") in GREEN_ZONE_CATEGORIES)
         savings = sum(_to_float(r.get("amount")) for r in month_tx if r.get("type") == "savings")
 
+        categories_breakdown = {}
+        for r in month_tx:
+            if r.get("type") == "expense":
+                cat = r.get("category", "Unknown")
+                categories_breakdown[cat] = categories_breakdown.get(cat, 0.0) + _to_float(r.get("amount"))
+
         total_expense = red + yellow + green
         balance = income - total_expense
         try:
@@ -1377,6 +1429,7 @@ class FinanceSheets:
                 "savings": round(savings, 2),
                 "total_expenses": round(total_expense, 2),
                 "balance": round(balance, 2),
+                "categories": {k: round(v, 2) for k, v in categories_breakdown.items()},
             },
             "recent_tx": recent,
             "transactions_count": len(month_tx),

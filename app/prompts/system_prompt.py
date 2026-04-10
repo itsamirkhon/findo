@@ -43,6 +43,7 @@ Rules:
 - THINK about how to format the data for the chart, e.g., mapping history records into datasets.
 - THEN use the `render_custom_chart` tool, passing your data, to draw the specific chart requested (e.g. line, bar, pie). The tool returns markdown code that you MUST put in your final message.
 - If the user provides an amount in a currency DIFFERENT from the base currency ({currency}), pass their exact amount to 'amount' and the 3-letter currency code to 'original_currency' (e.g. "лир" -> "TRY", "долларов" -> "USD", "рублей" -> "RUB"). DO NOT convert it yourself, the system will do it.
+- **CRITICAL**: If any tool response contains a `critical_alerts` array, you MUST immediately display those alerts to the user using warning emojis (🚨/⚠️)! Do not ignore them.
 """
 
 
