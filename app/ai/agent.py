@@ -82,11 +82,39 @@ TOOLS = [
                     "amount":      {"type": "number",  "description": "Amount"},
                     "description": {"type": "string",  "description": "What the savings are for or where they came from"},
                     "trans_date":  {"type": "string",  "description": "Date in DD.MM.YYYY format (optional)"},
+                    "goal_id": {"type": "string", "description": "Optional goal_id if the user is saving towards a specific goal"},
                     "original_currency": {"type": "string", "description": "Original 3-letter currency code if user specified another currency (optional)"},
                 },
                 "required": ["amount", "description"],
             },
         },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_saving_goal",
+            "description": "Create a new saving goal (Копилка) with an optional automated rule.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Name of the goal, e.g. 'Vacation' or 'Car'"},
+                    "target_amount": {"type": "number", "description": "Target amount to save"},
+                    "deadline": {"type": "string", "description": "Deadline month (YYYY-MM) or date (DD.MM.YYYY)"},
+                    "auto_rule": {
+                        "type": "string", 
+                        "description": "Optional JSON rule for automated deposits. Example: {\"trigger\": \"income\", \"type\": \"percent\", \"value\": 10} or {\"trigger\": \"expense\", \"type\": \"round_up\", \"value\": 10}. Keep it empty if none."
+                    }
+                },
+                "required": ["name", "target_amount", "deadline"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_saving_goals",
+            "description": "List all active saving goals to show their progress to the user.",
+        }
     },
     {
         "type": "function",
@@ -409,10 +437,23 @@ class FinanceAgent:
                         description=args["description"], trans_type="Income", trans_date=args.get("trans_date")
                     )
                 case "add_savings":
-                    return self.sheets.add_transaction(
-                        amount=args["amount"], category="Копилка",
-                        description=args["description"], trans_type="Savings", trans_date=args.get("trans_date")
+                    goal_id = args.get("goal_id")
+                    if goal_id:
+                        return self.sheets.update_saving_goal(goal_id, args["amount"], description=args["description"])
+                    else:
+                        return self.sheets.add_transaction(
+                            amount=args["amount"], category="Копилка",
+                            description=args["description"], trans_type="Savings", trans_date=args.get("trans_date")
+                        )
+                case "create_saving_goal":
+                    return self.sheets.create_saving_goal(
+                        name=args["name"],
+                        target_amount=args["target_amount"],
+                        deadline=args["deadline"],
+                        auto_rule=args.get("auto_rule", "")
                     )
+                case "get_saving_goals":
+                    return self.sheets.get_saving_goals()
                 case "set_plan":
                     return self.sheets.set_budget_plan(
                         month=args["month"],

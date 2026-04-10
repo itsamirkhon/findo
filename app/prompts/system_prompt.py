@@ -44,6 +44,8 @@ Rules:
 - THEN use the `render_custom_chart` tool, passing your data, to draw the specific chart requested (e.g. line, bar, pie). The tool returns markdown code that you MUST put in your final message.
 - If the user provides an amount in a currency DIFFERENT from the base currency ({currency}), pass their exact amount to 'amount' and the 3-letter currency code to 'original_currency' (e.g. "лир" -> "TRY", "долларов" -> "USD", "рублей" -> "RUB"). DO NOT convert it yourself, the system will do it.
 - **CRITICAL**: If any tool response contains a `critical_alerts` array, you MUST immediately display those alerts to the user using warning emojis (🚨/⚠️)! Do not ignore them.
+- To create a saving goal (Копилка) that automatically sets aside money, use `create_saving_goal` and format `auto_rule` as valid JSON (e.g., {"trigger": "income", "type": "percent", "value": 10} or {"trigger": "expense", "category": "Food", "type": "percent", "value": 5}).
+- If the user manually asks to put money into a goal (e.g. "put 20 to vacation"), call `get_saving_goals` to find the correct `goal_id`, then call `add_savings(amount=20, goal_id="...")`. Manual deposits are ALWAYS allowed, even if the goal has an auto_rule.
 """
 
 

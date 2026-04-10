@@ -121,6 +121,17 @@ PAYMENT_STATUS_HEADERS = [
 
 PAYMENT_STATUS_VALUES = {"pending", "paid", "snoozed"}
 
+SAVINGS_GOALS_HEADERS = [
+    "goal_id",
+    "name",
+    "target_amount",
+    "saved_amount",
+    "currency",
+    "deadline",
+    "auto_rule",
+    "created_at",
+]
+
 TYPE_LABELS = {
     "en": {"income": "Income", "expense": "Expense", "savings": "Savings"},
     "ru": {"income": "Доход", "expense": "Расход", "savings": "Копилка"},
@@ -251,6 +262,8 @@ class FinanceSheets:
         self._setup_expected_payments_sheet(ws5)
         ws6 = self.sh.add_worksheet(self._sheet_title("payment_status", DEFAULT_SHEET_LANGUAGE), rows=400, cols=7)
         self._setup_payment_status_sheet(ws6)
+        ws7 = self.sh.add_worksheet(self._sheet_title("savings_goals", DEFAULT_SHEET_LANGUAGE), rows=100, cols=8)
+        self._setup_savings_goals_sheet(ws7)
 
     def _ensure_sheets(self):
         for sheet_key, rows, cols, setup in (
@@ -260,6 +273,7 @@ class FinanceSheets:
             ("settings", 100, 2, self._reset_settings_sheet),
             ("expected_payments", 200, 9, self._setup_expected_payments_sheet),
             ("payment_status", 400, 7, self._setup_payment_status_sheet),
+            ("savings_goals", 100, 8, self._setup_savings_goals_sheet),
         ):
             if not self._find_worksheet(sheet_key):
                 ws = self.sh.add_worksheet(self._sheet_title(sheet_key, self.sheet_language), rows=rows, cols=cols)
@@ -386,6 +400,16 @@ class FinanceSheets:
             pass
         ws.clear()
         ws.update("A1:G1", [PAYMENT_STATUS_HEADERS])
+        ws.freeze(rows=1)
+
+    def _setup_savings_goals_sheet(self, ws) -> None:
+        try:
+            if ws.acell("A1").value == SAVINGS_GOALS_HEADERS[0]:
+                return
+        except Exception:
+            pass
+        ws.clear()
+        ws.update("A1:H1", [SAVINGS_GOALS_HEADERS])
         ws.freeze(rows=1)
 
     def _now_iso(self) -> str:
@@ -1109,7 +1133,7 @@ class FinanceSheets:
     # ─── Write transactions ─────────────────────────────────────────────────────
 
     def add_transaction(self, amount: float, category: str, description: str,
-                        trans_type: str, trans_date: Optional[str] = None) -> dict:
+                        trans_type: str, trans_date: Optional[str] = None, skip_auto_rules: bool = False) -> dict:
         ws = self._worksheet("transactions")
         now = datetime.datetime.now()
 
@@ -1140,9 +1164,50 @@ class FinanceSheets:
 
         # Auto-allocate 10% of every expense to project budget
         contribution = 0.0
-        if self._canonical_type(trans_type) == "expense":
+        if self._canonical_type(trans_type) == "expense" and not skip_auto_rules:
             contribution = round(float(amount) * 0.10, 2)
             self._add_to_project_budget(contribution)
+
+        # Process Auto Savings Rules
+        if not skip_auto_rules:
+            try:
+                goals = self.get_saving_goals()
+                for goal in goals:
+                    rule_str = goal.get("auto_rule", "").strip()
+                    if not rule_str: continue
+                    import json
+                    try:
+                        rule = json.loads(rule_str)
+                    except Exception:
+                        continue
+                    
+                    trigger = rule.get("trigger")
+                    typ = rule.get("type")
+                    val = float(rule.get("value", 0))
+                    
+                    trigger_match = False
+                    canon_type = self._canonical_type(trans_type)
+                    if trigger == "income" and canon_type == "income":
+                        trigger_match = True
+                    elif trigger == "expense" and canon_type == "expense":
+                        rcat = rule.get("category")
+                        if not rcat or self._canonical_category(rcat) == self._canonical_category(category):
+                            trigger_match = True
+                            
+                    if trigger_match:
+                        added_amount = 0.0
+                        if typ == "percent" and val > 0:
+                            added_amount = round(float(amount) * (val / 100.0), 2)
+                        elif typ == "round_up" and val > 0:
+                            rem = float(amount) % val
+                            if rem > 0:
+                                added_amount = round(val - rem, 2)
+                                
+                        if added_amount > 0:
+                            self.update_saving_goal(goal["goal_id"], added_amount, description="auto_rule")
+            except Exception:
+                pass
+
 
         result = {
             "success": True,
@@ -1447,6 +1512,73 @@ class FinanceSheets:
             month_key = str(month).strip()
             records = [r for r in records if str(r.get("month", "")).strip() == month_key]
         return records
+
+    # ─── Savings Goals ─────────────────────────────────────────────────────────
+
+    def get_saving_goals(self) -> list[dict]:
+        try:
+            ws = self._worksheet("savings_goals")
+            return [self._saving_goal_from_row(r) for r in ws.get_all_records()]
+        except Exception:
+            return []
+
+    def _saving_goal_from_row(self, row: dict) -> dict:
+        return {
+            "goal_id": str(row.get("goal_id", "")).strip(),
+            "name": str(row.get("name", "")).strip(),
+            "target_amount": self._safe_float(row.get("target_amount")),
+            "saved_amount": self._safe_float(row.get("saved_amount")),
+            "currency": str(row.get("currency", "")).strip() or self.currency,
+            "deadline": str(row.get("deadline", "")).strip(),
+            "auto_rule": str(row.get("auto_rule", "")).strip(),
+            "created_at": str(row.get("created_at", "")).strip(),
+        }
+
+    def create_saving_goal(self, name: str, target_amount: float, deadline: str, auto_rule: str = "") -> dict:
+        import uuid
+        ws = self._worksheet("savings_goals")
+        goal_id = str(uuid.uuid4())[:8]
+        row = [
+            goal_id,
+            name,
+            round(float(target_amount), 2),
+            0.0,
+            self.currency,
+            deadline,
+            auto_rule,
+            self._now_iso(),
+        ]
+        ws.append_row(row, value_input_option="USER_ENTERED")
+        return {"success": True, "goal_id": goal_id, "name": name, "target_amount": target_amount, "auto_rule": auto_rule}
+
+    def update_saving_goal(self, goal_id: str, add_amount: float, description: str = "") -> dict:
+        ws = self._worksheet("savings_goals")
+        records = ws.get_all_values()
+        if len(records) <= 1:
+            return {"success": False, "error": "No goals found"}
+        
+        headers = records[0]
+        try:
+            id_idx = headers.index("goal_id")
+            saved_idx = headers.index("saved_amount")
+            name_idx = headers.index("name")
+        except ValueError:
+            return {"success": False, "error": "Invalid sheet format"}
+            
+        for i, row in enumerate(records[1:], start=2):
+            if len(row) > id_idx and row[id_idx].strip() == goal_id:
+                current_saved = self._safe_float(row[saved_idx] if len(row) > saved_idx else "0")
+                new_saved = current_saved + float(add_amount)
+                ws.update_cell(i, saved_idx + 1, round(new_saved, 2))
+                name = row[name_idx] if len(row) > name_idx else "Unknown"
+                
+                # If positive, we ensure it's logged as a savings transaction in the budget
+                if add_amount > 0:
+                    desc_text = f"Копилка '{name}'" + (f" ({description})" if description else "")
+                    self.add_transaction(add_amount, "Копилка", desc_text, "savings", skip_auto_rules=True)
+                    
+                return {"success": True, "goal_id": goal_id, "new_saved": new_saved}
+        return {"success": False, "error": "Goal not found"}
 
     def get_spreadsheet_url(self) -> str:
         if self.sh:
