@@ -35,6 +35,7 @@ def help_text() -> str:
         "/settings — bot settings\n"
         "/payments — expected payments manager\n"
         "/analytics — advanced AI financial analytics\n"
+        "/goals   — saving goals (Копилки)\n"
         "/clear   — full reset with confirmation\n"
         "/help    — this help message\n\n"
         "*Example phrases:*\n"
@@ -72,6 +73,18 @@ async def cmd_analytics(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         "Пользователь запросил глубокую финансовую аналитику. ПРОАНАЛИЗИРУЙ данные (используй get_stats_by_month для "
         "текущего и прошлого месяцев для сравнения). Сравни траты по категориям, найди АНОМАЛИИ "
         "(сильный рост расходов), оцени выполнение плана и дай 2-3 практичных совета по оптимизации."
+    )
+    await reply_agent_stream(update, prompt)
+
+
+async def cmd_goals(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if not allowed(update.effective_user.id):
+        return
+    await ctx.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    prompt = (
+        "Пользователь вызвал /goals. Покажи все его Копилки (используй get_saving_goals). "
+        "Для каждой цели покажи: имя, прогресс (saved/target), процент, дедлайн и правило автонакопления если есть. "
+        "Если копилок нет, предложи создать первую."
     )
     await reply_agent_stream(update, prompt)
 
