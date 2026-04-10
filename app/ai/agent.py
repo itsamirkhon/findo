@@ -47,6 +47,7 @@ TOOLS = [
                     "category":    {"type": "string",  "enum": EXPENSE_CATEGORY_ENUM},
                     "description": {"type": "string",  "description": "Description"},
                     "trans_date":  {"type": "string",  "description": "Date in DD.MM.YYYY format (optional)"},
+                    "original_currency": {"type": "string", "description": "Original 3-letter currency code if user specified a currency different from the base one (optional)"},
                 },
                 "required": ["amount", "category", "description"],
             },
@@ -64,6 +65,7 @@ TOOLS = [
                     "category":    {"type": "string",  "enum": INCOME_CATEGORY_ENUM},
                     "description": {"type": "string",  "description": "Description"},
                     "trans_date":  {"type": "string",  "description": "Date in DD.MM.YYYY format (optional)"},
+                    "original_currency": {"type": "string", "description": "Original 3-letter currency code if user specified another currency (optional)"},
                 },
                 "required": ["amount", "category", "description"],
             },
@@ -80,6 +82,7 @@ TOOLS = [
                     "amount":      {"type": "number",  "description": "Amount"},
                     "description": {"type": "string",  "description": "What the savings are for or where they came from"},
                     "trans_date":  {"type": "string",  "description": "Date in DD.MM.YYYY format (optional)"},
+                    "original_currency": {"type": "string", "description": "Original 3-letter currency code if user specified another currency (optional)"},
                 },
                 "required": ["amount", "description"],
             },
@@ -174,7 +177,8 @@ TOOLS = [
                     "amount":      {"type": "number",  "description": "New amount (optional)"},
                     "category":    {"type": "string",  "description": "New category (optional)"},
                     "description": {"type": "string",  "description": "New description (optional)"},
-                    "trans_date":  {"type": "string",  "description": "New date in DD.MM.YYYY format (optional)"}
+                    "trans_date":  {"type": "string",  "description": "New date in DD.MM.YYYY format (optional)"},
+                    "original_currency": {"type": "string", "description": "Original currency code if user specified another currency (optional)"}
                 },
                 "required": ["row_id"]
             }
@@ -191,7 +195,8 @@ TOOLS = [
                     "name":     {"type": "string", "description": "Name of the subscription or bill (e.g. Netflix, Rent)"},
                     "category": {"type": "string", "enum": EXPENSE_CATEGORY_ENUM + INCOME_CATEGORY_ENUM},
                     "amount":   {"type": "number", "description": "Amount"},
-                    "due_day":  {"type": "integer", "description": "Day of the month it is due (1-31)"}
+                    "due_day":  {"type": "integer", "description": "Day of the month it is due (1-31)"},
+                    "original_currency": {"type": "string", "description": "Original currency code if user specified another currency (optional)"}
                 },
                 "required": ["name", "category", "amount", "due_day"]
             }
@@ -364,7 +369,7 @@ class FinanceAgent:
                     args = json.loads(tc["function"]["arguments"])
                 except Exception:
                     args = {}
-                result = self._run_tool(tc["function"]["name"], args)
+                result = await self._run_tool(tc["function"]["name"], args)
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tc["id"],
@@ -373,8 +378,25 @@ class FinanceAgent:
 
         return "I couldn't process the request. Please try again."
 
-    def _run_tool(self, name: str, args: dict) -> dict:
+    async def _run_tool(self, name: str, args: dict) -> dict:
         try:
+            # Handle currency auto-conversion centrally for tools that use amount and original_currency
+            if "original_currency" in args and "amount" in args and args["amount"] is not None:
+                orig_currency = str(args["original_currency"]).strip().upper()
+                if orig_currency and orig_currency != self.currency.upper():
+                    from app.services.currency_service import convert_amount
+                    orig_amount = args["amount"]
+                    args["amount"] = await convert_amount(orig_amount, orig_currency, self.currency)
+                    
+                    # Append original amount to description or name
+                    orig_label = f" [{orig_amount} {orig_currency}]"
+                    if "description" in args and args["description"] is not None:
+                        args["description"] = f"{args['description']}{orig_label}"
+                    elif "name" in args and args["name"] is not None:
+                        args["name"] = f"{args['name']}{orig_label}"
+                    elif "description" not in args:
+                        args["description"] = orig_label.strip()
+
             match name:
                 case "add_expense":
                     return self.sheets.add_transaction(
@@ -514,7 +536,7 @@ class FinanceAgent:
                 if tool_name in WRITE_TOOLS and sig in executed_writes:
                     result = {"error": "Duplicate: the same operation with identical data has already been executed"}
                 else:
-                    result = self._run_tool(tool_name, args)
+                    result = await self._run_tool(tool_name, args)
                     if tool_name in WRITE_TOOLS:
                         executed_writes.add(sig)
                 messages.append({
