@@ -31,9 +31,8 @@ build/
 *.egg-info/
 
 # Drafts and posts
-.releases/RELEASE_NOTES_DRAFTS.md
-.releases/FEATURE_IDEAS.md
-.releases/BLOG_POST.md
+.releases/
+releases/
 
 # Database files (if used later)
 *.db
